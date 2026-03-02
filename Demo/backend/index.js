@@ -4,6 +4,8 @@ const mongoose = require('mongoose')
 require('dotenv').config()
 
 const authRoutes = require('./routes/auth')
+const uploadRoutes = require('./routes/uploads')
+const { authMiddleware } = require('./middleware/auth')
 
 const app = express()
 
@@ -15,6 +17,7 @@ app.get('/api/health', (req, res) => {
 })
 
 app.use('/api/auth', authRoutes)
+app.use('/api/uploads', authMiddleware, uploadRoutes)
 
 const port = process.env.PORT || 4000
 const mongoUri = process.env.MONGO_URI || ''
