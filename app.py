@@ -2,8 +2,16 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from paramedic_agent import ParamedicAgent
 from tools import ParamedicAgentTools
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="WIMTACH Paramedic Assistant API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Allows ALL frontends to talk to your backend
+    allow_credentials=True,
+    allow_methods=["*"], # Allows POST, GET, etc.
+    allow_headers=["*"],
+)
 
 # 1. Initialize your Agent (Use the OpenRouter config we discussed)
 tools_array = [

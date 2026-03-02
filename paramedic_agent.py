@@ -66,13 +66,21 @@ import os
 
 
 class ParamedicAgent:
-    def __init__(self, tools, model_name="google/gemini-flash-1.5"):
+    def __init__(self, tools, model_name="google/gemini-flash-1.5-8b".strip()):
         load_dotenv()  # This loads environment variables from the .env file
         api_key = os.getenv('OPENROUTER_API_KEY')  # 'GEMINI_API_KEY' is the environment variable name you set above
         if not api_key:
             raise ValueError("API key not set. Please set the OPENROUTER_API_KEY environment variable.")
-        
-        base_llm = ChatOpenAI(model=model_name, api_key=api_key, temperature=0)
+      
+        base_llm = ChatOpenAI(
+            model=model_name,
+              api_key=api_key,
+              openai_api_base="https://openrouter.ai/api/v1".strip(),
+            default_headers={
+                "HTTP-Referer": "http://localhost:3000".strip(), # Required by OpenRouter
+                "X-Title": "WIMTACH Paramedic Assistant".strip()
+            } ,
+              temperature=0)
         
         self.llm = base_llm.with_structured_output(ParamedicForm)
 
