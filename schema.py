@@ -5,7 +5,10 @@ from typing import Annotated, Literal,Union,Optional,Any,List
 
 class TeddyBearForm(BaseModel):
     form_type: Literal["teddy_bear"] = Field(default="teddy_bear")
-    date_time: datetime = Field(description="The date and time of the incident in YYYY-MM-DD HH:MM format")
+    date_time: datetime = Field(
+        description="The date and time of the incident. Format: YYYY-MM-DD HH:MM. "
+                    "Use the current year (2026) provided in the system prompt."
+        )
     paramedic_first_name : str = Field(description="First name of the paramedic")
     paramedic_last_name : str = Field(description="Last name of the paramedic")
     paramedic_medic_number : str = Field(description="Medic number of the paramedic")
@@ -19,8 +22,10 @@ class TeddyBearForm(BaseModel):
 
 class OcurrenceReport(BaseModel):
     form_type: Literal["occurrence_report"] = Field(default="occurrence_report")
-    date: str = Field(description="The date of the report in YYYY-MM-DD format.")
-    time: str = Field(description="The time of the report in 24-hour HH:MM format.")
+
+    date: str = Field(description="The date of the report in YYYY-MM-DD format. (e.g., 2026-03-03).")
+    time: str = Field(description="The time of the report in 24-hour HH:MM format.(e.g., 15:55).")
+
     call_number: str = Field(description="Unique identifier for the call")
     occurrence_type: str = Field(description="Type of the occurrence, e.g., 'Medical Emergency'")
     occurrence_reference_number: str = Field(description="Reference number for the occurrence")

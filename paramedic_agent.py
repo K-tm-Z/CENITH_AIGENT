@@ -117,8 +117,12 @@ class ParamedicAgent:
         
         # 1. Prepare context (Time/Date)
         now = datetime.now()
-        context_instruction = f"Current Time: {now.strftime('%H:%M')}. History is active."
-
+        # current_dt = now.strftime('%Y-%m-%d %H:%M')
+        context_instruction = (
+            f"CRITICAL: The current reference time is {now.strftime('%H:%M')} "
+            f"on {now.strftime('%Y-%m-%d')}. All relative mentions like 'ten minutes ago' "
+            "must be calculated from THIS specific timestamp."
+        )
         # 2. Retrieve existing memory from the checkpointer
         state = self.agent.get_state(config)
         # If messages exist in the state, use them; otherwise, start fresh
@@ -141,17 +145,4 @@ class ParamedicAgent:
             config,
             {"messages": [("user", query), ("assistant", result.model_dump_json())]}
         )
-
         return result.model_dump_json()
-    
-# if __name__ == "__main__":
-#     toolsArray = [
-#         ParamedicAgentTools.log_teddy_bear_gift, 
-#         ParamedicAgentTools.update_vehicle_inventory, 
-#         ParamedicAgentTools.log_incident_detail]
-#     # str_prompt = "You are a WIMTACH Emergency Dispatch Agent at Centennial College. Your goal is to support decision-making by analyzing vitals and checking hospital capacity. If vitals are CRITICAL " \
-#     # "and the ICU is full, suggest diverting to the nearest partner hospital."
-  
-#     agent_instance = ParamedicAgent(toolsArray)
-#     query = "We have a patient with Heart Rate 110 and SpO2 85. Can we take them to the ICU?"
-#     print(agent_instance.ask(query, thread_id="patient_123"))  # Print the agent's final response

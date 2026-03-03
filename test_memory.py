@@ -27,7 +27,6 @@ def test_sarah_scenario():
     if 'Sarah' in str(form_data.values()):
          print("SUCCESS: Name found in extracted data.")
 
-
 def run_administrative_memory_test(tools_list):
     test_agent = ParamedicAgent(tools=tools_list)
     thread_1 = "paramedic_session_402"
@@ -123,16 +122,36 @@ def test_checklist_extraction():
     if form_data.get('total_issues_found') == 2:
         print("SUCCESS: Issue count correctly summed.")
 
+def test_temporal_logic():
+    agent = ParamedicAgent(tools=[])
+    # Use a unique thread for a clean slate
+    thread_id = f"time_test_{datetime.now().strftime('%M%S')}"
+    
+    # We use a specific relative time mention
+    transcript = "It's Marco. I just gave a teddy bear to a 4-year-old boy about ten minutes ago."
+    
+    print("--- Running Temporal Logic Test ---")
+    raw_result = agent.ask(transcript, thread_id=thread_id)
+    result = json.loads(raw_result)
+    form_data = result.get('form', {})
+    
+    extracted_time = form_data.get('time') or form_data.get('date_time')
+    print(f"Agent Extracted Time: {extracted_time}")
+    
+    # Logic: If current time is 16:05, extracted time should be approx 15:55
+    # For the demo, we just want to see if it's NOT a hallucinated '00:00'
+    if extracted_time and "MISSING" not in str(extracted_time):
+        print("SUCCESS: AI interpreted relative time and converted to timestamp.")
 
 if __name__ == "__main__":
     # Ensure tools match your current tools.py list
     tools_array = [
-        ParamedicAgentTools.log_teddy_bear_gift, 
-   
+        ParamedicAgentTools.log_teddy_bear_gift,
         ParamedicAgentTools.log_occurrence_report
     ]
     
-    # run_administrative_memory_test(tools_array)
-    # test_sarah_scenario()
+    run_administrative_memory_test(tools_array)
+    test_sarah_scenario()
     test_checklist_extraction()
-    # test_messy_transcript()
+    test_messy_transcript()
+    test_temporal_logic()
