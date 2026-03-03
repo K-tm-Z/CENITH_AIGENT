@@ -3,12 +3,13 @@ const cors = require('cors')
 const mongoose = require('mongoose')
 require('dotenv').config()
 
-const authRoutes = require('./routes/auth')
+const authRoutes = require('./routes/auth.router')
 const uploadRoutes = require('./routes/uploads')
 const { authMiddleware } = require('./middleware/auth')
+const audioTestRouter = require("./routes/audioTest.js")
 
 const app = express()
-
+console.log("MONGO_URI =", process.env.MONGO_URI)
 app.use(cors())
 app.use(express.json())
 
@@ -18,6 +19,7 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api/auth', authRoutes)
 app.use('/api/uploads', authMiddleware, uploadRoutes)
+app.use('/api', audioTestRouter)
 
 const port = process.env.PORT || 4000
 const mongoUri = process.env.MONGO_URI || ''

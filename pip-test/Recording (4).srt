@@ -1,0 +1,8 @@
+1
+00:00:00,000 --> 00:00:04,000
+This is the second test with background noise.
+
+2
+00:00:04,000 --> 00:00:08,000
+My ID is EMS001.
+

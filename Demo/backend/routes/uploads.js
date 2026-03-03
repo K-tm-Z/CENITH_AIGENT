@@ -24,6 +24,75 @@ const upload = multer({
   }
 })
 
+// POST /api/uploads/speech-text
+// Accepts transcript text from the browser (Web Speech API) and attaches it to a FormSubmission.
+router.post('/speech-text', async (req, res) => {
+  try {
+    if (!req.user || !req.device) {
+      return res.status(401).json({ error: 'Authentication required' })
+    }
+
+    const { submissionId, segmentType, patientId, templateId, transcript } = req.body || {}
+
+    if (!transcript || !String(transcript).trim()) {
+      return res.status(400).json({ error: 'transcript is required' })
+    }
+
+    let submission
+    let template = null
+
+    if (submissionId) {
+      submission = await FormSubmission.findById(submissionId)
+    }
+
+    if (!submission) {
+      if (templateId) {
+        template = await FormTemplate.findById(templateId).catch(() => null)
+      }
+
+      submission = await FormSubmission.create({
+        user: req.user._id,
+        device: req.device._id,
+        patientId: patientId || undefined,
+        template: template ? template._id : undefined,
+        status: 'processing',
+        rawInputSources: []
+      })
+    }
+
+    submission.rawInputSources.push({
+      type: 'speech',
+      mimeType: 'text/plain',
+      originalName: 'web-speech-transcript.txt',
+      segmentType: segmentType || 'unknown',
+      transcript: String(transcript).trim()
+    })
+
+    const existing = submission.structuredData || {}
+    const transcriptField = (existing.fields && existing.fields.transcript) || ''
+
+    submission.structuredData = {
+      ...existing,
+      fields: {
+        ...(existing.fields || {}),
+        transcript: [transcriptField, String(transcript).trim()].filter(Boolean).join('\n\n')
+      }
+    }
+
+    submission.status = 'draft'
+    await submission.save()
+
+    res.status(201).json({
+      submissionId: submission._id,
+      status: submission.status,
+      structuredData: submission.structuredData
+    })
+  } catch (err) {
+    console.error('Error in /uploads/speech-text', err)
+    res.status(500).json({ error: 'Failed to attach speech transcript' })
+  }
+})
+
 // POST /api/uploads/documents
 // Accepts a PDF/image upload and creates/updates a FormSubmission, then
 // runs a best-effort OCR + AI parsing pipeline to populate structuredData.
