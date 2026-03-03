@@ -1,3 +1,4 @@
+from datetime import datetime
 import json 
 from paramedic_agent import ParamedicAgent # Match your new class name
 from tools import ParamedicAgentTools
@@ -90,7 +91,7 @@ def test_messy_transcript():
 def test_checklist_extraction():
     # 1. Initialize
     agent = ParamedicAgent(tools=[]) 
-    
+    unique_thread = f"checklist_test_{datetime.now().strftime('%M%S')}"
     # 2. Simulate a Paramedic starting their shift
     transcript = (
         "Hey, this is Paramedic Marco. Starting my shift. "
@@ -101,7 +102,7 @@ def test_checklist_extraction():
     )
     
     print("--- Running Checklist Extraction Test ---")
-    raw_response = agent.ask(transcript, thread_id="shift_start_marco")
+    raw_response = agent.ask(transcript, thread_id=unique_thread)
     result = json.loads(raw_response)
 
     # 3. Validation Logic (Accounting for the 'form' wrapper)
@@ -131,7 +132,7 @@ if __name__ == "__main__":
         ParamedicAgentTools.log_occurrence_report
     ]
     
-    run_administrative_memory_test(tools_array)
+    # run_administrative_memory_test(tools_array)
     # test_sarah_scenario()
-    # test_checklist_extraction()
+    test_checklist_extraction()
     # test_messy_transcript()
