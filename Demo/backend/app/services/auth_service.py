@@ -1,169 +1,151 @@
-import os
-import hashlib
-import secrets
+# services/auth_service.py
+from __future__ import annotations
+
 from datetime import datetime, timedelta
+from typing import Any, Tuple
+
+import bcrypt
 from jose import jwt
-from bson import ObjectId
 
 from ..config import settings
 from ..db import get_client
 
-def get_enrollment_code() -> str | None:
-    return settings.DEVICE_ENROLLMENT_CODE or settings.ENROLLMENT_CODE
-
-def compute_expected_assertion(challenge: str, public_key: str) -> str:
-    raw = f"{challenge}:{public_key}".encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()
-
 def _db():
-    client = get_client()
-    # If your URI includes a default DB, you can use get_default_database().
-    # Otherwise, pick a DB name explicitly:
-    return client.get_default_database()
+    return get_client().get_default_database()
 
-async def enroll_device(idNumber: str, oneTimeCode: str, publicKey: str,
-                        firstName: str | None, lastName: str | None):
-    expected = get_enrollment_code()
-    if expected and oneTimeCode != expected:
-        return None, "Invalid one-time code"
+def _hash_password(password: str) -> str:
+    if not password or len(password) < 8:
+        raise ValueError("Password must be at least 8 characters")
+    salt = bcrypt.gensalt(rounds=int(settings.BCRYPT_ROUNDS))
+    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
+def _verify_password(password: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    except Exception:
+        return False
+
+def _issue_access_token(*, user_id: str, scopes: list[str], role: str) -> tuple[str, datetime]:
+    if not settings.JWT_SECRET:
+        raise RuntimeError("JWT_SECRET is not configured")
+
+    expires_at = datetime.utcnow() + timedelta(minutes=int(settings.ACCESS_TOKEN_EXPIRE_MINUTES))
+    payload = {
+        "sub": user_id,
+        "scopes": scopes,
+        "role": role,
+        "exp": int(expires_at.timestamp()),
+        "iat": int(datetime.utcnow().timestamp()),
+        "typ": "access",
+    }
+    token = jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+    return token, expires_at
+
+async def register_user(
+    *,
+    email: str,
+    password: str,
+    first_name: str | None,
+    last_name: str | None,
+) -> Tuple[dict[str, Any] | None, tuple[str, int] | None]:
     db = _db()
     users = db["users"]
-    devices = db["devices"]
 
-    user = await users.find_one({"idNumber": idNumber})
-    if not user:
-        user_doc = {
-            "idNumber": idNumber,
-            "firstName": firstName,
-            "lastName": lastName,
-            "status": "active",
-            "role": "user",
-            "allowedScopes": [],
-        }
-        ins = await users.insert_one(user_doc)
-        user = {**user_doc, "_id": ins.inserted_id}
-    else:
-        update = {}
-        if firstName and user.get("firstName") != firstName:
-            update["firstName"] = firstName
-        if lastName and user.get("lastName") != lastName:
-            update["lastName"] = lastName
-        if update:
-            await users.update_one({"_id": user["_id"]}, {"$set": update})
-            user.update(update)
+    norm_email = (email or "").strip().lower()
+    if not norm_email:
+        return None, ("Email is required", 400)
 
-    device_id = secrets.token_hex(16)  # substitute for crypto.randomUUID()
-    device_doc = {
-        "deviceId": device_id,
-        "userId": str(user["_id"]),
-        "publicKey": publicKey,
+    existing = await users.find_one({"email": norm_email})
+    if existing:
+        return None, ("Email already registered", 409)
+
+    try:
+        password_hash = _hash_password(password)
+    except ValueError as e:
+        return None, (str(e), 400)
+
+    user_doc = {
+        "email": norm_email,
+        "passwordHash": password_hash,
+        "firstName": first_name,
+        "lastName": last_name,
         "status": "active",
-        "currentChallenge": None,
-        "currentChallengeExpiresAt": None,
-        "lastSeenAt": None,
+        "role": "user",
+        "allowedScopes": [],
+        "createdAt": datetime.utcnow(),
     }
-    await devices.insert_one(device_doc)
+    ins = await users.insert_one(user_doc)
+    user_id = str(ins.inserted_id)
+
+    token, expires_at = _issue_access_token(user_id=user_id, scopes=[], role="user")
 
     return {
-        "deviceId": device_id,
-        "userId": str(user["_id"]),
+        "accessToken": token,
+        "expiresAt": expires_at,
         "user": {
-            "id": str(user["_id"]),
-            "idNumber": user["idNumber"],
-            "firstName": user.get("firstName"),
-            "lastName": user.get("lastName"),
-            "role": user.get("role", "user"),
-        }
+            "id": user_id,
+            "email": norm_email,
+            "firstName": first_name,
+            "lastName": last_name,
+            "role": "user",
+        },
     }, None
 
-async def get_challenge(deviceId: str):
+async def login_user(
+    *,
+    email: str,
+    password: str,
+) -> Tuple[dict[str, Any] | None, tuple[str, int] | None]:
     db = _db()
-    devices = db["devices"]
     users = db["users"]
 
-    device = await devices.find_one({"deviceId": deviceId})
-    if not device:
-        return None, "Device not found"
+    norm_email = (email or "").strip().lower()
+    if not norm_email or not password:
+        return None, ("Invalid email or password", 401)
 
-    user = await users.find_one({"_id": ObjectId(device["userId"])})
-    if not user:
-        return None, "Device not found"
+    user = await users.find_one({"email": norm_email})
+    if not user or user.get("status") != "active":
+        return None, ("Invalid email or password", 401)
 
-    if device.get("status") != "active" or user.get("status") != "active":
-        return None, "Device or user not active"
-
-    challenge = secrets.token_hex(32)
-    expires_at = datetime.utcnow() + timedelta(minutes=5)
-
-    await devices.update_one(
-        {"_id": device["_id"]},
-        {"$set": {"currentChallenge": challenge, "currentChallengeExpiresAt": expires_at}}
-    )
-
-    return {"deviceId": deviceId, "challenge": challenge, "expiresAt": expires_at}, None
-
-async def verify_assertion(deviceId: str, challenge: str, assertion: str):
-    if not settings.JWT_SECRET:
-        return None, "JWT_SECRET is not configured"
-
-    db = _db()
-    devices = db["devices"]
-    users = db["users"]
-    session_tokens = db["session_tokens"]
-
-    device = await devices.find_one({"deviceId": deviceId})
-    if not device:
-        return None, "Device not found"
-
-    user = await users.find_one({"_id": ObjectId(device["userId"])})
-    if not user:
-        return None, "Device not found"
-
-    if device.get("status") != "active" or user.get("status") != "active":
-        return None, "Device or user not active"
-
-    exp = device.get("currentChallengeExpiresAt")
-    if (
-        not device.get("currentChallenge")
-        or device["currentChallenge"] != challenge
-        or not exp
-        or exp <= datetime.utcnow()
-    ):
-        return None, "Challenge is invalid or expired"
-
-    expected = compute_expected_assertion(challenge, device["publicKey"])
-    if expected != assertion:
-        return None, "Invalid assertion"
-
-    await devices.update_one(
-        {"_id": device["_id"]},
-        {"$set": {"currentChallenge": None, "currentChallengeExpiresAt": None, "lastSeenAt": datetime.utcnow()}}
-    )
+    if not _verify_password(password, user.get("passwordHash", "")):
+        return None, ("Invalid email or password", 401)
 
     scopes = user.get("allowedScopes") if isinstance(user.get("allowedScopes"), list) else []
-    payload = {"sub": str(user["_id"]), "deviceId": deviceId, "scopes": scopes}
-    token = jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
-    expires_at = datetime.utcnow() + timedelta(minutes=15)
-
-    await session_tokens.insert_one({
-        "userId": str(user["_id"]),
-        "deviceId": deviceId,
-        "accessToken": token,
-        "scopes": scopes,
-        "expiresAt": expires_at,
-        "revoked": False
-    })
+    role = user.get("role", "user")
+    user_id = str(user["_id"])
+    token, expires_at = _issue_access_token(user_id=user_id, scopes=scopes, role=role)
 
     return {
         "accessToken": token,
         "expiresAt": expires_at,
         "user": {
-            "id": str(user["_id"]),
-            "idNumber": user["idNumber"],
+            "id": user_id,
+            "email": user.get("email"),
             "firstName": user.get("firstName"),
             "lastName": user.get("lastName"),
-            "role": user.get("role", "user"),
+            "role": role,
         },
-        "deviceId": deviceId
+    }, None
+
+async def get_user_public(user_id: str) -> Tuple[dict[str, Any] | None, tuple[str, int] | None]:
+    from bson import ObjectId
+
+    db = _db()
+    users = db["users"]
+
+    try:
+        oid = ObjectId(user_id)
+    except Exception:
+        return None, ("Invalid user id", 400)
+
+    user = await users.find_one({"_id": oid})
+    if not user:
+        return None, ("User not found", 404)
+
+    return {
+        "id": str(user["_id"]),
+        "email": user.get("email"),
+        "firstName": user.get("firstName"),
+        "lastName": user.get("lastName"),
+        "role": user.get("role", "user"),
     }, None

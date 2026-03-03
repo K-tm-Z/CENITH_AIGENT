@@ -1,9 +1,11 @@
-from pydantic import BaseModel, Field
+# models/user.py
+from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
 
 class UserInDB(BaseModel):
     id: str = Field(..., alias="_id")
-    idNumber: str
+    email: EmailStr
+    passwordHash: str
     firstName: Optional[str] = None
     lastName: Optional[str] = None
     status: str = "active"
@@ -12,7 +14,7 @@ class UserInDB(BaseModel):
 
 class UserPublic(BaseModel):
     id: str
-    idNumber: str
+    email: EmailStr
     firstName: Optional[str] = None
     lastName: Optional[str] = None
     role: str

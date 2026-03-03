@@ -1,47 +1,65 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+# routers/auth.py
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+from pydantic import BaseModel, EmailStr
 from typing import Optional
+
+from ..config import settings
 from ..services import auth_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-class EnrollDeviceReq(BaseModel):
-    idNumber: str
+class RegisterReq(BaseModel):
+    email: EmailStr
+    password: str
     firstName: Optional[str] = None
     lastName: Optional[str] = None
-    oneTimeCode: str
-    publicKey: str
 
-@router.post("/enroll-device", status_code=201)
-async def enroll_device(body: EnrollDeviceReq):
-    data, err = await auth_service.enroll_device(
-        body.idNumber, body.oneTimeCode, body.publicKey, body.firstName, body.lastName
+@router.post("/register", status_code=201)
+async def register(body: RegisterReq):
+    data, err = await auth_service.register_user(
+        email=body.email,
+        password=body.password,
+        first_name=body.firstName,
+        last_name=body.lastName,
     )
     if err:
         msg, code = err
         raise HTTPException(status_code=code, detail=msg)
     return data
 
-class GetChallengeReq(BaseModel):
-    deviceId: str
+class LoginReq(BaseModel):
+    email: EmailStr
+    password: str
 
-@router.post("/get-challenge")
-async def get_challenge(body: GetChallengeReq):
-    data, err = await auth_service.get_challenge(body.deviceId)
+@router.post("/login")
+async def login(body: LoginReq):
+    data, err = await auth_service.login_user(email=body.email, password=body.password)
     if err:
         msg, code = err
         raise HTTPException(status_code=code, detail=msg)
     return data
 
-class VerifyAssertionReq(BaseModel):
-    deviceId: str
-    challenge: str
-    assertion: str
+def _get_user_id_from_token(token: str = Depends(oauth2_scheme)) -> str:
+    if not settings.JWT_SECRET:
+        raise HTTPException(status_code=500, detail="JWT_SECRET is not configured")
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        sub = payload.get("sub")
+        if not isinstance(sub, str) or not sub:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return sub
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
-@router.post("/verify-assertion")
-async def verify_assertion(body: VerifyAssertionReq):
-    data, err = await auth_service.verify_assertion(body.deviceId, body.challenge, body.assertion)
+@router.get("/me")
+async def me(user_id: str = Depends(_get_user_id_from_token)):
+    data, err = await auth_service.get_user_public(user_id)
     if err:
         msg, code = err
         raise HTTPException(status_code=code, detail=msg)
-    return data
+    return {"user": data}

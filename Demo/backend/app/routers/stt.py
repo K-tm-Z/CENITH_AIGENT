@@ -1,19 +1,20 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, File, Form, UploadFile, Depends, HTTPException
+
+from ..deps import require_auth  # whatever you use for JWT auth
 from ..services.stt_service import transcribe_audio
 
-router = APIRouter(prefix="/api", tags=["stt"])
+router = APIRouter()
 
-@router.post("/stt")
-async def stt(
+@router.post("/api/stt/transcribe")
+async def stt_transcribe(
     audio: UploadFile = File(...),
-    segmentType: str | None = Form(default=None),
+    segmentType: str | None = Form(None),
+    user=Depends(require_auth),  # ensure only logged-in users can call this
 ):
-    data = await audio.read()
-    if data is None:
-        raise HTTPException(status_code=400, detail="No audio provided")
+    blob = await audio.read()
+    result = await transcribe_audio(blob, audio.content_type, segmentType)
 
-    return await transcribe_audio(
-        audio=data,
-        mime_type=audio.content_type,
-        segment_type=segmentType,
-    )
+    if result.get("error"):
+        raise HTTPException(status_code=502, detail=result)
+
+    return result
