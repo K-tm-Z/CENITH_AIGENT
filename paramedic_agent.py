@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from prompts import Prompts
 from datetime import datetime
 from typing import Union
-from schema import TeddyBearForm, OcurrenceReport, ParamedicResponse
+from schema import TeddyBearForm, OcurrenceReport, ParamedicResponse, ParamedicCheckList
 import os
 
 # IMPORTANT: Best practices for handling API keys securely in Python
@@ -96,20 +96,35 @@ class ParamedicAgent:
         )
 
     def ask(self, query: str, thread_id: str):
+        config = {"configurable": {"thread_id": thread_id}}
+        
+        # 1. Prepare context (Time/Date)
         now = datetime.now()
-        current_date = now.strftime("%Y-%m-%d")
-        current_time = now.strftime("%H:%M")
-        current_day = now.strftime("%A")
-        context_instruction = (
-        f"Today is {current_day}, {current_date}. The current time is {current_time}. "
-        "Use this as the reference for any relative time mentions like 'now', 'today', or 'ten minutes ago'."
-    )
-        messages = [
-        ("system", self.system_prompt + "\n\n" + context_instruction),
-        ("user", query)
-    ]
-        # We use the STRUCTURED version to ensure JSON output
-        result = self.structured_llm.invoke(messages)
+        context_instruction = f"Current Time: {now.strftime('%H:%M')}. History is active."
+
+        # 2. Retrieve existing memory from the checkpointer
+        state = self.agent.get_state(config)
+        # If messages exist in the state, use them; otherwise, start fresh
+        messages = state.values.get("messages", []) if state.values else []
+        
+        # 3. Build the full conversation chain for the LLM
+        # We include the System Prompt + History + Current Query
+        full_query = [
+            ("system", self.system_prompt + "\n\n" + context_instruction)
+        ]
+        full_query.extend(messages) # Add history
+        full_query.append(("user", query)) # Add new input
+
+        # 4. Invoke the structured model
+        result = self.structured_llm.invoke(full_query)
+        
+        # 5. SAVE the turn back to the checkpointer
+        # This is crucial so Phase 3 remembers Phase 2
+        self.agent.update_state(
+            config,
+            {"messages": [("user", query), ("assistant", result.model_dump_json())]}
+        )
+
         return result.model_dump_json()
     
 # if __name__ == "__main__":
