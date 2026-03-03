@@ -1,7 +1,16 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+# from typing import Optional
 from datetime import datetime
-from typing import Literal
+from typing import Literal,Union,Optional,Any,List
+
+
+# THE MASTER WRAPPER
+class ParamedicResponse(BaseModel):
+    """The final response container that the API returns."""
+    # The AI chooses the best fitting form from this list
+    form: Union[TeddyBearForm, OcurrenceReport, ParamedicCheckList] = Field(
+        description="The extracted form. Logic: TeddyBearForm for comfort, OcurrenceReport for scene logs, ParamedicCheckList for pre-shift checks."
+    )
 
 class TeddyBearForm(BaseModel):
     date_time: datetime = Field(description="The date and time of the incident in YYYY-MM-DD HH:MM format")
@@ -41,3 +50,15 @@ class OcurrenceReport(BaseModel):
     requested_by_details: str = Field(description="Additional details about the requester, e.g., 'Dr. Jane Smith, Chief Medical Officer'")
     report_creator: str = Field(description="Name of the person creating the report, e.g., 'Paramedic John Doe'")
     report_creator_details: str = Field(description="Additional details about the report creator, e.g., 'Badge #12345, Driver'")
+
+class ChecklistEntry(BaseModel):
+    item_code: Literal['ACRc', 'ACEr', 'CERT-DL', 'CERT-Va', 'UNIF', 'CRIM', 'ACP', 'VAC', 'MEALS', 'OVER']
+    status: Literal['GOOD', 'BAD']
+    notes: str = Field(description="Details about this specific check.")
+
+class ParamedicCheckList(BaseModel):
+    """Pre-shift checklist report."""
+    form_type: Literal["shift_checklist"] = "shift_checklist"
+    entries: List[ChecklistEntry]
+    total_issues_found: int
+    
