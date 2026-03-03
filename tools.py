@@ -34,7 +34,4 @@ class ParamedicAgentTools:
         status = f"Police: {police_involved}, Fire: {fire_involved}"
         return f"RECORDS_UPDATED: Report {call_number} ({occurrence_type}) filed by Badge {badge_number}. {status}."
 
-    @tool
-    def update_vehicle_inventory(item: str, status: str, vehicle_number: str) -> str:
-        """Updates equipment status for a specific ambulance unit."""
-        return f"INVENTORY_SYNC: Unit {vehicle_number} - {item} is now {status}."
+   

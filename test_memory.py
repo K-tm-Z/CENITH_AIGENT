@@ -133,7 +133,7 @@ if __name__ == "__main__":
     # Ensure tools match your current tools.py list
     tools_array = [
         ParamedicAgentTools.log_teddy_bear_gift, 
-        ParamedicAgentTools.update_vehicle_inventory, 
+   
         ParamedicAgentTools.log_occurrence_report
     ]
     

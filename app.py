@@ -17,7 +17,6 @@ app.add_middleware(
 # 1. Initialize your Agent (Use the OpenRouter config we discussed)
 tools_array = [
         ParamedicAgentTools.log_teddy_bear_gift, 
-        ParamedicAgentTools.update_vehicle_inventory, 
         ParamedicAgentTools.log_incident_detail
         ]
 
