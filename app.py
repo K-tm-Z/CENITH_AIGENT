@@ -52,4 +52,12 @@ async def process_voice_data(request: TranscriptRequest):
         print(f"CRITICAL ERROR: {e}")
         raise HTTPException(status_code=500, detail="Agent failed to structure the data.")
 
+@app.post("/reset-session")
+async def reset_session(request: TranscriptRequest):
+    try:
+        msg = agent.clear_memory(request.thread_id)
+        return {"status": "success", "message": msg}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # To run this: uvicorn app:app --reload

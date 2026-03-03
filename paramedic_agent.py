@@ -95,6 +95,23 @@ class ParamedicAgent:
             checkpointer=self.checkpointer
         )
 
+    def clear_memory(self, thread_id: str):
+        """
+        Manually clears the conversation history for a specific thread
+        without changing the ID.
+        """
+        config = {"configurable": {"thread_id": thread_id}}
+        
+        # We update the state with an empty list of messages.
+        # In LangGraph, passing an empty list to the 'messages' key 
+        # effectively resets the conversation for that thread.
+        self.agent.update_state(
+            config,
+            {"messages": []}, # Overwrite with empty history
+            as_node="__start__" # Tells LangGraph to treat this as a fresh start
+        )
+        return f"Memory for thread {thread_id} has been cleared."
+
     def ask(self, query: str, thread_id: str):
         config = {"configurable": {"thread_id": thread_id}}
         
