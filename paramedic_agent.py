@@ -1,6 +1,6 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
-from schema import ParamedicForm
+# from schema import ParamedicForm
 from tools import ParamedicAgentTools
 from langchain.agents import create_agent
 from langgraph.checkpoint.memory import InMemorySaver as MemorySaver
@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from prompts import Prompts
 from datetime import datetime
 from typing import Union
-from schema import TeddyBearForm, OcurrenceReport
+from schema import TeddyBearForm, OcurrenceReport, ParamedicResponse
 import os
 
 # IMPORTANT: Best practices for handling API keys securely in Python
@@ -58,8 +58,6 @@ import os
 # 5. **Use key management systems (optional for advanced setups)**:
 #    - For more complex applications, you may want to look into key management services such as **AWS Secrets Manager**, **Azure Key Vault**, or **Google Cloud Secret Manager**.
 #
-
-
 class ParamedicAgent:
     def __init__(self, tools, model_name="google/gemini-2.0-flash-001"):
         load_dotenv()
@@ -80,8 +78,7 @@ class ParamedicAgent:
             temperature=0
         )
 
-        # self.structured_llm = self.base_llm.with_structured_output(ParamedicForm)
-        self.structured_llm = self.base_llm.with_structured_output(Union[TeddyBearForm, OcurrenceReport])
+        self.structured_llm = self.base_llm.with_structured_output(ParamedicResponse)
         self.tools = tools
         self.system_prompt = Prompts.get_prompt()
         self.checkpointer = MemorySaver()
