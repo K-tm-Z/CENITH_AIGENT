@@ -96,6 +96,38 @@ def test_messy_transcript():
          print("SUCCESS: Correctly extracted age despite fillers.")
     if form_data.get("badge_number") == "12345":
          print("SUCCESS: Captured badge number from the end of the sentence.")
+         
+def test_checklist_extraction():
+    # 1. Initialize
+    agent = ParamedicAgent(tools=[]) 
+    
+    # 2. Simulate a Paramedic starting their shift
+    transcript = (
+        "Hey, this is Paramedic Marco. Starting my shift. "
+        "My ACRs are all finished, so ACRc is good. "
+        "But I noticed my uniform credits are low, so UNIF is bad. "
+        "Also, the meal claims for yesterday are missed, so MEALS is bad. "
+        "Total issues found: two. Everything else is fine."
+    )
+    
+    print("--- Running Checklist Extraction Test ---")
+    raw_response = agent.ask(transcript, thread_id="shift_start_marco")
+    result = json.loads(raw_response)
+
+    # 3. Validation Logic (Accounting for the 'form' wrapper)
+    form_data = result.get('form', {})
+    entries = form_data.get('entries', [])
+
+    print(f"Extracted {len(entries)} checklist entries.")
+    
+    # Check if the AI correctly mapped the "ACRc" status
+    acrc_entry = next((e for e in entries if e['item_code'] == 'ACRc'), None)
+    if acrc_entry and acrc_entry['status'] == 'GOOD':
+        print("SUCCESS: ACRc correctly mapped to GOOD.")
+        
+    if form_data.get('total_issues_found') == 2:
+        print("SUCCESS: Issue count correctly summed.")
+
 
 if __name__ == "__main__":
     # Ensure tools match your current tools.py list

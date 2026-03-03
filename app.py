@@ -29,21 +29,29 @@ class TranscriptRequest(BaseModel):
     thread_id: str
 
 # 3. Create the Route
+
 @app.post("/process-transcript")
 async def process_voice_data(request: TranscriptRequest):
     try:
-        # Call your agent's 'ask' method
+        # 1. Get the stringified JSON from the agent
         response_json_string = agent.ask(request.text, thread_id=request.thread_id)
         
-        structured_data = json.loads(response_json_string)
-        # Return the AI's response as a clean JSON object
+        # 2. Convert to dictionary
+        full_response = json.loads(response_json_string)
+        
+        # 3. Extract the actual form data from the wrapper
+        # This makes it easier for the frontend to access the data directly
+        extracted_form = full_response.get("form", {})
+        
+        # 4. Determine which schema was used (useful for frontend conditional rendering)
+        # We can detect this based on unique keys or by adding a 'type' field to our schemas
         return {
             "status": "success",
-            "data": structured_data,
+            "extracted_data": extracted_form,
             "thread_id": request.thread_id
         }
     except Exception as e:
-        print(f"Error processing transcript: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"CRITICAL ERROR: {e}")
+        raise HTTPException(status_code=500, detail="Agent failed to structure the data.")
 
 # To run this: uvicorn app:app --reload
