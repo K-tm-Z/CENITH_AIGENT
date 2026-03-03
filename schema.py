@@ -1,10 +1,14 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, Tag
 # from typing import Optional
 from datetime import datetime
-from typing import Literal,Union,Optional,Any,List
+from typing import Annotated, Literal,Union,Optional,Any,List
 
 class TeddyBearForm(BaseModel):
-    date_time: datetime = Field(description="The date and time of the incident in YYYY-MM-DD HH:MM format")
+    form_type: Literal["teddy_bear"] = Field(default="teddy_bear")
+    date_time: datetime = Field(
+        description="The date and time of the incident. Format: YYYY-MM-DD HH:MM. "
+                    "Use the current year (2026) provided in the system prompt."
+        )
     paramedic_first_name : str = Field(description="First name of the paramedic")
     paramedic_last_name : str = Field(description="Last name of the paramedic")
     paramedic_medic_number : str = Field(description="Medic number of the paramedic")
@@ -17,8 +21,11 @@ class TeddyBearForm(BaseModel):
 
 
 class OcurrenceReport(BaseModel):
-    date: str = Field(description="The date of the report in YYYY-MM-DD format.")
-    time: str = Field(description="The time of the report in 24-hour HH:MM format.")
+    form_type: Literal["occurrence_report"] = Field(default="occurrence_report")
+
+    date: str = Field(description="The date of the report in YYYY-MM-DD format. (e.g., 2026-03-03).")
+    time: str = Field(description="The time of the report in 24-hour HH:MM format.(e.g., 15:55).")
+
     call_number: str = Field(description="Unique identifier for the call")
     occurrence_type: str = Field(description="Type of the occurrence, e.g., 'Medical Emergency'")
     occurrence_reference_number: str = Field(description="Reference number for the occurrence")
@@ -49,14 +56,17 @@ class ChecklistEntry(BaseModel):
 
 class ParamedicCheckList(BaseModel):
     """Pre-shift checklist report."""
-    form_type: Literal["shift_checklist"] = "shift_checklist"
+    form_type: Literal["shift_checklist"] = Field(default="shift_checklist")
     entries: List[ChecklistEntry]
     total_issues_found: int
 
 # THE MASTER WRAPPER
 class ParamedicResponse(BaseModel):
-    """The final response container that the API returns."""
-    # The AI chooses the best fitting form from this list
-    form: Union[TeddyBearForm, OcurrenceReport, ParamedicCheckList] = Field(
-        description="The extracted form. Logic: TeddyBearForm for comfort, OcurrenceReport for scene logs, ParamedicCheckList for pre-shift checks."
-    )
+    form: Annotated[
+        Union[
+            Annotated[TeddyBearForm, Tag("teddy_bear")],
+            Annotated[OcurrenceReport, Tag("occurrence_report")],
+            Annotated[ParamedicCheckList, Tag("shift_checklist")]
+        ],
+        Field(discriminator="form_type")
+    ]

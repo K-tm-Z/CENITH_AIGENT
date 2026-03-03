@@ -44,3 +44,19 @@ Your frontend will receive a "Status" and a "Data" object containing fields from
   },
   "thread_id": "ambulance_101"
 }
+
+### 🔄 Session & State Management
+
+Our Paramedic Assistant is designed with **Stateful Intelligence**. It uses a persistent memory layer to ensure data integrity across multi-turn conversations.
+
+#### **Endpoint: POST `/reset-session`**
+In a clinical setting, context contamination is a risk. We implemented this endpoint to allow the Paramedic to "wipe the slate clean" without losing their session connection.
+
+* **Use Case:** If the paramedic makes a verbal error or needs to start a completely new report within the same ambulance thread.
+* **Technical Implementation:** Calls the `clear_memory` method, which interacts with the `LangGraph` checkpointer to reset the `messages` list to an empty state.
+* **Benefit:** Prevents "Sarah's" data from accidentally being injected into "Marco's" shift checklist.
+
+### 🛡️ Data Validation & Integrity
+We utilize **Pydantic Discriminated Unions** to enforce strict schema adherence:
+- **Zero Hallucination:** If the AI attempts to create a non-standard form type (e.g., `teddy_bear_donation`), the validation layer rejects the input.
+- **Persistent Identifiers:** Critical data points like `Badge Number` are stored in the session state and automatically injected into subsequent forms to reduce manual input.

@@ -14,13 +14,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 1. Initialize your Agent (Use the OpenRouter config we discussed)
+# 1. Initialize Agent (Use OpenRouter config discussed)
 tools_array = [
         ParamedicAgentTools.log_teddy_bear_gift, 
         ParamedicAgentTools.log_incident_detail
         ]
 
-# system_msg = "You are a Paramedic Assistant. Extract patient data from the transcript and format it."
 agent = ParamedicAgent(tools=tools_array)
 # 2. Define what the incoming data looks like (The Request)
 class TranscriptRequest(BaseModel):
@@ -52,5 +51,13 @@ async def process_voice_data(request: TranscriptRequest):
     except Exception as e:
         print(f"CRITICAL ERROR: {e}")
         raise HTTPException(status_code=500, detail="Agent failed to structure the data.")
+
+@app.post("/reset-session")
+async def reset_session(request: TranscriptRequest):
+    try:
+        msg = agent.clear_memory(request.thread_id)
+        return {"status": "success", "message": msg}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # To run this: uvicorn app:app --reload

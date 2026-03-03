@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from prompts import Prompts
 from datetime import datetime
 from typing import Union
-from schema import TeddyBearForm, OcurrenceReport, ParamedicResponse
+from schema import TeddyBearForm, OcurrenceReport, ParamedicResponse, ParamedicCheckList
 import os
 
 # IMPORTANT: Best practices for handling API keys securely in Python
@@ -95,31 +95,54 @@ class ParamedicAgent:
             checkpointer=self.checkpointer
         )
 
+    def clear_memory(self, thread_id: str):
+        """
+        Manually clears the conversation history for a specific thread
+        without changing the ID.
+        """
+        config = {"configurable": {"thread_id": thread_id}}
+        
+        # We update the state with an empty list of messages.
+        # In LangGraph, passing an empty list to the 'messages' key 
+        # effectively resets the conversation for that thread.
+        self.agent.update_state(
+            config,
+            {"messages": []}, # Overwrite with empty history
+            as_node="__start__" # Tells LangGraph to treat this as a fresh start
+        )
+        return f"Memory for thread {thread_id} has been cleared."
+
     def ask(self, query: str, thread_id: str):
+        config = {"configurable": {"thread_id": thread_id}}
+        
+        # 1. Prepare context (Time/Date)
         now = datetime.now()
-        current_date = now.strftime("%Y-%m-%d")
-        current_time = now.strftime("%H:%M")
-        current_day = now.strftime("%A")
+        # current_dt = now.strftime('%Y-%m-%d %H:%M')
         context_instruction = (
-        f"Today is {current_day}, {current_date}. The current time is {current_time}. "
-        "Use this as the reference for any relative time mentions like 'now', 'today', or 'ten minutes ago'."
-    )
-        messages = [
-        ("system", self.system_prompt + "\n\n" + context_instruction),
-        ("user", query)
-    ]
-        # We use the STRUCTURED version to ensure JSON output
-        result = self.structured_llm.invoke(messages)
+            f"CRITICAL: The current reference time is {now.strftime('%H:%M')} "
+            f"on {now.strftime('%Y-%m-%d')}. All relative mentions like 'ten minutes ago' "
+            "must be calculated from THIS specific timestamp."
+        )
+        # 2. Retrieve existing memory from the checkpointer
+        state = self.agent.get_state(config)
+        # If messages exist in the state, use them; otherwise, start fresh
+        messages = state.values.get("messages", []) if state.values else []
+        
+        # 3. Build the full conversation chain for the LLM
+        # We include the System Prompt + History + Current Query
+        full_query = [
+            ("system", self.system_prompt + "\n\n" + context_instruction)
+        ]
+        full_query.extend(messages) # Add history
+        full_query.append(("user", query)) # Add new input
+
+        # 4. Invoke the structured model
+        result = self.structured_llm.invoke(full_query)
+        
+        # 5. SAVE the turn back to the checkpointer
+        # This is crucial so Phase 3 remembers Phase 2
+        self.agent.update_state(
+            config,
+            {"messages": [("user", query), ("assistant", result.model_dump_json())]}
+        )
         return result.model_dump_json()
-    
-# if __name__ == "__main__":
-#     toolsArray = [
-#         ParamedicAgentTools.log_teddy_bear_gift, 
-#         ParamedicAgentTools.update_vehicle_inventory, 
-#         ParamedicAgentTools.log_incident_detail]
-#     # str_prompt = "You are a WIMTACH Emergency Dispatch Agent at Centennial College. Your goal is to support decision-making by analyzing vitals and checking hospital capacity. If vitals are CRITICAL " \
-#     # "and the ICU is full, suggest diverting to the nearest partner hospital."
-  
-#     agent_instance = ParamedicAgent(toolsArray)
-#     query = "We have a patient with Heart Rate 110 and SpO2 85. Can we take them to the ICU?"
-#     print(agent_instance.ask(query, thread_id="patient_123"))  # Print the agent's final response

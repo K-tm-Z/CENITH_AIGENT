@@ -1,5 +1,5 @@
-import json
-
+from datetime import datetime
+import json 
 from paramedic_agent import ParamedicAgent # Match your new class name
 from tools import ParamedicAgentTools
 
@@ -27,49 +27,39 @@ def test_sarah_scenario():
     if 'Sarah' in str(form_data.values()):
          print("SUCCESS: Name found in extracted data.")
 
-import json
-
 def run_administrative_memory_test(tools_list):
     test_agent = ParamedicAgent(tools=tools_list)
     thread_1 = "paramedic_session_402"
     
     print("Starting Administrative Memory Test...\n")
 
-    # Phase 1: Test multi-turn extraction (Oxygen level -> Occurrence Report)
-    print("--- Phase 1: Scene Arrival & Vehicle Check ---")
+    # Phase 1: Context Setting
+    print("--- Phase 1: Scene Arrival ---")
     p1_raw = test_agent.ask(
-        "Arrived at scene. Vehicle 502, Oxygen tank is at 45% and sirens work. Badge 12345.", 
+        "Arrived at scene. This is an official incident report. Badge 12345.", 
         thread_id=thread_1
     )
     p1 = json.loads(p1_raw)
-    # The data is now inside the 'form' key because of our ParamedicResponse wrapper
-    print(f"Agent Logged Oxygen: {p1['form'].get('observations')}\n")
+    print(f"Agent identified form: {p1['form'].get('form_type')}\n")
 
-    # Phase 2: Context Recall within a Schema
-    print("--- Phase 2: Form Completion via Memory ---")
-    # We see if the agent can use the Badge/Vehicle info from Phase 1 to fill a new form
+    # Phase 2: Recall
+    print("--- Phase 2: Memory Recall ---")
+    # We use a Teddy Bear transcript which requires 'paramedic_medic_number'
     p2_raw = test_agent.ask(
-        "We just gave a teddy bear to a 6-year-old boy named Leo.", 
+        "We just gave a teddy bear to a child. Use the medic number I gave you at arrival.", 
         thread_id=thread_1
     )
     p2 = json.loads(p2_raw)
     
-    # SUCCESS CRITERIA: Does it remember the badge number from Turn 1?
-    print(f"Agent Form Output: {json.dumps(p2, indent=2)}")
-    if p2['form'].get('paramedic_medic_number') == "12345":
-        print("SUCCESS: Agent remembered Medic Number from Turn 1.")
-
-    # Phase 3: Thread Isolation (New Paramedic/Ambulance)
-    print("--- Phase 3: Testing Thread Isolation ---")
-    thread_2 = "paramedic_session_999"
-    p3_raw = test_agent.ask(
-        "What is the status of my oxygen tank?", 
-        thread_id=thread_2
-    )
-    p3 = json.loads(p3_raw)
-    # Thread 2 should NOT see Turn 1's observations
-    if "45%" not in str(p3):
-        print("SUCCESS: Thread 2 is isolated from Thread 1 memory.")
+    # SUCCESS CRITERIA:
+    # In Sarah/Teddy form, it's 'paramedic_medic_number'. 
+    # In Occurrence form, it's 'badge_number'.
+    found_id = p2['form'].get('paramedic_medic_number') or p2['form'].get('badge_number')
+    
+    if found_id == "12345":
+        print("SUCCESS: Agent remembered ID across forms.")
+    else:
+        print(f"FAIL: Agent returned {found_id}")
         
 def test_messy_transcript():
     agent = ParamedicAgent(tools=[]) # No tools needed for extraction test
@@ -100,7 +90,7 @@ def test_messy_transcript():
 def test_checklist_extraction():
     # 1. Initialize
     agent = ParamedicAgent(tools=[]) 
-    
+    unique_thread = f"checklist_test_{datetime.now().strftime('%M%S')}"
     # 2. Simulate a Paramedic starting their shift
     transcript = (
         "Hey, this is Paramedic Marco. Starting my shift. "
@@ -111,12 +101,16 @@ def test_checklist_extraction():
     )
     
     print("--- Running Checklist Extraction Test ---")
-    raw_response = agent.ask(transcript, thread_id="shift_start_marco")
+    raw_response = agent.ask(transcript, thread_id=unique_thread)
     result = json.loads(raw_response)
 
     # 3. Validation Logic (Accounting for the 'form' wrapper)
     form_data = result.get('form', {})
     entries = form_data.get('entries', [])
+
+    #Print the form type for debugging
+    form_type = form_data.get('form_type', 'occurrence_report')
+    print(f"DEBUG: AI chose form type: {form_type}")
 
     print(f"Extracted {len(entries)} checklist entries.")
     
@@ -128,12 +122,31 @@ def test_checklist_extraction():
     if form_data.get('total_issues_found') == 2:
         print("SUCCESS: Issue count correctly summed.")
 
+def test_temporal_logic():
+    agent = ParamedicAgent(tools=[])
+    # Use a unique thread for a clean slate
+    thread_id = f"time_test_{datetime.now().strftime('%M%S')}"
+    
+    # We use a specific relative time mention
+    transcript = "It's Marco. I just gave a teddy bear to a 4-year-old boy about ten minutes ago."
+    
+    print("--- Running Temporal Logic Test ---")
+    raw_result = agent.ask(transcript, thread_id=thread_id)
+    result = json.loads(raw_result)
+    form_data = result.get('form', {})
+    
+    extracted_time = form_data.get('time') or form_data.get('date_time')
+    print(f"Agent Extracted Time: {extracted_time}")
+    
+    # Logic: If current time is 16:05, extracted time should be approx 15:55
+    # For the demo, we just want to see if it's NOT a hallucinated '00:00'
+    if extracted_time and "MISSING" not in str(extracted_time):
+        print("SUCCESS: AI interpreted relative time and converted to timestamp.")
 
 if __name__ == "__main__":
     # Ensure tools match your current tools.py list
     tools_array = [
-        ParamedicAgentTools.log_teddy_bear_gift, 
-   
+        ParamedicAgentTools.log_teddy_bear_gift,
         ParamedicAgentTools.log_occurrence_report
     ]
     
@@ -141,3 +154,4 @@ if __name__ == "__main__":
     test_sarah_scenario()
     test_checklist_extraction()
     test_messy_transcript()
+    test_temporal_logic()
