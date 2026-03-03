@@ -3,15 +3,6 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Literal,Union,Optional,Any,List
 
-
-# THE MASTER WRAPPER
-class ParamedicResponse(BaseModel):
-    """The final response container that the API returns."""
-    # The AI chooses the best fitting form from this list
-    form: Union[TeddyBearForm, OcurrenceReport, ParamedicCheckList] = Field(
-        description="The extracted form. Logic: TeddyBearForm for comfort, OcurrenceReport for scene logs, ParamedicCheckList for pre-shift checks."
-    )
-
 class TeddyBearForm(BaseModel):
     date_time: datetime = Field(description="The date and time of the incident in YYYY-MM-DD HH:MM format")
     paramedic_first_name : str = Field(description="First name of the paramedic")
@@ -61,4 +52,11 @@ class ParamedicCheckList(BaseModel):
     form_type: Literal["shift_checklist"] = "shift_checklist"
     entries: List[ChecklistEntry]
     total_issues_found: int
-    
+
+# THE MASTER WRAPPER
+class ParamedicResponse(BaseModel):
+    """The final response container that the API returns."""
+    # The AI chooses the best fitting form from this list
+    form: Union[TeddyBearForm, OcurrenceReport, ParamedicCheckList] = Field(
+        description="The extracted form. Logic: TeddyBearForm for comfort, OcurrenceReport for scene logs, ParamedicCheckList for pre-shift checks."
+    )

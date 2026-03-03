@@ -96,7 +96,7 @@ def test_messy_transcript():
          print("SUCCESS: Correctly extracted age despite fillers.")
     if form_data.get("badge_number") == "12345":
          print("SUCCESS: Captured badge number from the end of the sentence.")
-         
+
 def test_checklist_extraction():
     # 1. Initialize
     agent = ParamedicAgent(tools=[]) 
@@ -137,6 +137,7 @@ if __name__ == "__main__":
         ParamedicAgentTools.log_occurrence_report
     ]
     
-    # run_administrative_memory_test(tools_array)
-    # test_sarah_scenario()
+    run_administrative_memory_test(tools_array)
+    test_sarah_scenario()
+    test_checklist_extraction()
     test_messy_transcript()

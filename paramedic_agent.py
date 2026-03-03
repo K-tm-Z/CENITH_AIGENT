@@ -21,7 +21,7 @@ import os
 #      1. Open **Start Menu**, type `Environment Variables`, and select **Edit the system environment variables**.
 #      2. Under **System Properties**, click **Environment Variables**.
 #      3. Under **User variables**, click **New...** and add a new variable with:
-#         - Name: `GEMINI_API_KEY` (or whatever name you prefer).
+#         - Name: `OPENROUTER_API_KEY` (or whatever name you prefer).
 #         - Value: Your actual API key.
 #
 # 2. **Access the API key in Python**:
@@ -29,9 +29,9 @@ import os
 #
 #    ```python
 #    import os
-#    api_key = os.getenv('GEMINI_API_KEY')  # 'GEMINI_API_KEY' is the environment variable name you set above
+#    api_key = os.getenv('OPENROUTER_API_KEY')  # 'OPENROUTER_API_KEY' is the environment variable name you set above
 #    if not api_key:
-#        raise ValueError("API key not set. Please set the GEMINI_API_KEY environment variable.")
+#        raise ValueError("API key not set. Please set the OPENROUTER_API_KEY environment variable.")
 #    ```
 #
 # 3. **Use `.env` files for local development**:
@@ -39,13 +39,13 @@ import os
 #      - Run `pip install python-dotenv` in your VSCode terminal.
 #    - Create a `.env` file in the root directory of your project:
 #      ```
-#      GEMINI_API_KEY=your_api_key_here
+#      OPENROUTER_API_KEY=your_api_key_here
 #      ```
 #    - Then, in your Python code, load the `.env` file like this:
 #    ```python
 #    from dotenv import load_dotenv
 #    load_dotenv()  # This loads environment variables from the .env file
-#    api_key = os.getenv('GEMINI_API_KEY')
+#    api_key = os.getenv('OPENROUTER_API_KEY')
 #    ```
 #
 # 4. **Never commit your keys to version control**:
