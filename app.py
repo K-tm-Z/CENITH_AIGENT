@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from paramedic_agent import ParamedicAgent
 from tools import ParamedicAgentTools
 from fastapi.middleware.cors import CORSMiddleware
+import json
 
 app = FastAPI(title="WIMTACH Paramedic Assistant API")
 app.add_middleware(
@@ -16,7 +17,6 @@ app.add_middleware(
 # 1. Initialize your Agent (Use the OpenRouter config we discussed)
 tools_array = [
         ParamedicAgentTools.log_teddy_bear_gift, 
-        ParamedicAgentTools.update_vehicle_inventory, 
         ParamedicAgentTools.log_incident_detail
         ]
 
@@ -28,19 +28,29 @@ class TranscriptRequest(BaseModel):
     thread_id: str
 
 # 3. Create the Route
+
 @app.post("/process-transcript")
 async def process_voice_data(request: TranscriptRequest):
     try:
-        # Call your agent's 'ask' method
-        response_text = agent.ask(request.text, thread_id=request.thread_id)
+        # 1. Get the stringified JSON from the agent
+        response_json_string = agent.ask(request.text, thread_id=request.thread_id)
         
-        # Return the AI's response as a clean JSON object
+        # 2. Convert to dictionary
+        full_response = json.loads(response_json_string)
+        
+        # 3. Extract the actual form data from the wrapper
+        # This makes it easier for the frontend to access the data directly
+        extracted_form = full_response.get("form", {})
+        
+        # 4. Determine which schema was used (useful for frontend conditional rendering)
+        # We can detect this based on unique keys or by adding a 'type' field to our schemas
         return {
             "status": "success",
-            "data": response_text,
+            "extracted_data": extracted_form,
             "thread_id": request.thread_id
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"CRITICAL ERROR: {e}")
+        raise HTTPException(status_code=500, detail="Agent failed to structure the data.")
 
 # To run this: uvicorn app:app --reload

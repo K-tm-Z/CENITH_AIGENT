@@ -1,11 +1,14 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
-from schema import ParamedicForm
+# from schema import ParamedicForm
 from tools import ParamedicAgentTools
 from langchain.agents import create_agent
 from langgraph.checkpoint.memory import InMemorySaver as MemorySaver
 from dotenv import load_dotenv
 from prompts import Prompts
+from datetime import datetime
+from typing import Union
+from schema import TeddyBearForm, OcurrenceReport, ParamedicResponse
 import os
 
 # IMPORTANT: Best practices for handling API keys securely in Python
@@ -18,7 +21,7 @@ import os
 #      1. Open **Start Menu**, type `Environment Variables`, and select **Edit the system environment variables**.
 #      2. Under **System Properties**, click **Environment Variables**.
 #      3. Under **User variables**, click **New...** and add a new variable with:
-#         - Name: `GEMINI_API_KEY` (or whatever name you prefer).
+#         - Name: `OPENROUTER_API_KEY` (or whatever name you prefer).
 #         - Value: Your actual API key.
 #
 # 2. **Access the API key in Python**:
@@ -26,9 +29,9 @@ import os
 #
 #    ```python
 #    import os
-#    api_key = os.getenv('GEMINI_API_KEY')  # 'GEMINI_API_KEY' is the environment variable name you set above
+#    api_key = os.getenv('OPENROUTER_API_KEY')  # 'OPENROUTER_API_KEY' is the environment variable name you set above
 #    if not api_key:
-#        raise ValueError("API key not set. Please set the GEMINI_API_KEY environment variable.")
+#        raise ValueError("API key not set. Please set the OPENROUTER_API_KEY environment variable.")
 #    ```
 #
 # 3. **Use `.env` files for local development**:
@@ -36,13 +39,13 @@ import os
 #      - Run `pip install python-dotenv` in your VSCode terminal.
 #    - Create a `.env` file in the root directory of your project:
 #      ```
-#      GEMINI_API_KEY=your_api_key_here
+#      OPENROUTER_API_KEY=your_api_key_here
 #      ```
 #    - Then, in your Python code, load the `.env` file like this:
 #    ```python
 #    from dotenv import load_dotenv
 #    load_dotenv()  # This loads environment variables from the .env file
-#    api_key = os.getenv('GEMINI_API_KEY')
+#    api_key = os.getenv('OPENROUTER_API_KEY')
 #    ```
 #
 # 4. **Never commit your keys to version control**:
@@ -55,10 +58,6 @@ import os
 # 5. **Use key management systems (optional for advanced setups)**:
 #    - For more complex applications, you may want to look into key management services such as **AWS Secrets Manager**, **Azure Key Vault**, or **Google Cloud Secret Manager**.
 #
-
-
-
-
 class ParamedicAgent:
     def __init__(self, tools, model_name="google/gemini-2.0-flash-001"):
         load_dotenv()
@@ -79,8 +78,7 @@ class ParamedicAgent:
             temperature=0
         )
 
-        self.structured_llm = self.base_llm.with_structured_output(ParamedicForm)
-
+        self.structured_llm = self.base_llm.with_structured_output(ParamedicResponse)
         self.tools = tools
         self.system_prompt = Prompts.get_prompt()
         self.checkpointer = MemorySaver()
@@ -98,10 +96,18 @@ class ParamedicAgent:
         )
 
     def ask(self, query: str, thread_id: str):
+        now = datetime.now()
+        current_date = now.strftime("%Y-%m-%d")
+        current_time = now.strftime("%H:%M")
+        current_day = now.strftime("%A")
+        context_instruction = (
+        f"Today is {current_day}, {current_date}. The current time is {current_time}. "
+        "Use this as the reference for any relative time mentions like 'now', 'today', or 'ten minutes ago'."
+    )
         messages = [
-            ("system", self.system_prompt),
-            ("user", query)
-        ]
+        ("system", self.system_prompt + "\n\n" + context_instruction),
+        ("user", query)
+    ]
         # We use the STRUCTURED version to ensure JSON output
         result = self.structured_llm.invoke(messages)
         return result.model_dump_json()
