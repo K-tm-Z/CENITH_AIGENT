@@ -10,9 +10,6 @@ import os
 
 # IMPORTANT: Best practices for handling API keys securely in Python
 # 
-# While hardcoding your API key directly into the code might seem fine for learning or quick prototypes, 
-# it’s **not recommended for production environments** or shared codebases, as it exposes your sensitive credentials.
-#
 # Here’s how you can securely store and use your API key in your project:
 #
 # 1. **Use Environment Variables**:
@@ -58,51 +55,55 @@ import os
 # 5. **Use key management systems (optional for advanced setups)**:
 #    - For more complex applications, you may want to look into key management services such as **AWS Secrets Manager**, **Azure Key Vault**, or **Google Cloud Secret Manager**.
 #
-# By following these practices, you can help protect your API keys from exposure, reduce security risks, and make your code more portable and reusable across environments.
-#
-# Happy coding! 🚀
 
-# 1. Initialize the LLM
+
 
 
 class ParamedicAgent:
-    def __init__(self, tools, model_name="google/gemini-flash-1.5-8b".strip()):
-        load_dotenv()  # This loads environment variables from the .env file
-        api_key = os.getenv('OPENROUTER_API_KEY')  # 'GEMINI_API_KEY' is the environment variable name you set above
+    def __init__(self, tools, model_name="google/gemini-2.0-flash-001"):
+        load_dotenv()
+        api_key = os.getenv('OPENROUTER_API_KEY')
+        
         if not api_key:
             raise ValueError("API key not set. Please set the OPENROUTER_API_KEY environment variable.")
       
-        base_llm = ChatOpenAI(
-            model=model_name,
-              api_key=api_key,
-              openai_api_base="https://openrouter.ai/api/v1".strip(),
+        # 1. Initialize the Base Model
+        self.base_llm = ChatOpenAI(
+            model=model_name.strip(), # Note: Use 'model', not 'model_name' for this class
+            api_key=api_key,
+            openai_api_base="https://openrouter.ai/api/v1",
             default_headers={
-                "HTTP-Referer": "http://localhost:3000".strip(), # Required by OpenRouter
-                "X-Title": "WIMTACH Paramedic Assistant".strip()
-            } ,
-              temperature=0)
-        
-        self.llm = base_llm.with_structured_output(ParamedicForm)
+                "HTTP-Referer": "http://localhost:3000",
+                "X-Title": "WIMTACH Paramedic Assistant"
+            },
+            temperature=0
+        )
 
-        # self.llm_with_tools = self.llm.bind_tools(tools)
+        self.structured_llm = self.base_llm.with_structured_output(ParamedicForm)
+
         self.tools = tools
         self.system_prompt = Prompts.get_prompt()
         self.checkpointer = MemorySaver()
+        
+
         self.agent = self.get_agent()
 
     def get_agent(self):
-        return create_agent(model=self.llm, tools=self.tools,
-        system_prompt=self.system_prompt, checkpointer=self.checkpointer)
+        # The agent needs the base_llm to handle tools and conversation
+        return create_agent(
+            model=self.base_llm, 
+            tools=self.tools,
+            system_prompt=self.system_prompt, 
+            checkpointer=self.checkpointer
+        )
 
     def ask(self, query: str, thread_id: str):
-        """Helper method to simplify calling the agent"""
         messages = [
-        ("system", self.system_prompt),
-        ("user", query)
-    ]
-
-        result = self.llm.invoke(messages)
-     
+            ("system", self.system_prompt),
+            ("user", query)
+        ]
+        # We use the STRUCTURED version to ensure JSON output
+        result = self.structured_llm.invoke(messages)
         return result.model_dump_json()
     
 # if __name__ == "__main__":
