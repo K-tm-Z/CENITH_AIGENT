@@ -1,29 +1,31 @@
+import json
+
 from paramedic_agent import ParamedicAgent # Match your new class name
 from tools import ParamedicAgentTools
 
 def test_sarah_scenario():
-    # 1. Initialize with your admin tools
+    # 1. Initialize
     tools = [ParamedicAgentTools.log_teddy_bear_gift]
     agent = ParamedicAgent(tools=tools)
     
-    # 2. The "Sarah" Transcript
+    # 2. The Transcript
     transcript = "We are in Room 302. We just gave Sarah, a 5-year-old girl, a teddy bear because she was very scared."
     thread_id = "ambulance_unit_A1"
 
     print("Running Sarah Triage Test...")
-    result = agent.ask(transcript, thread_id=thread_id)
+    raw_result = agent.ask(transcript, thread_id=thread_id)
+    result = json.loads(raw_result) # result is now a dict
 
-    # 3. Validation Logic
     print(f"Agent Output: {result}")
     
-    # Check if the data is mapped correctly
-    if hasattr(result, 'patient_name') and result.patient_name == "Sarah":
-        print("SUCCESS: Name correctly extracted.")
-    if hasattr(result, 'age') and result.age == 5:
+    # 3. Validation Logic (Using Dictionary keys instead of attributes)
+    # Note: Using .get() is safer to avoid KeyErrors
+    if result.get('teddy_bear_recipient_age') == 5:
         print("SUCCESS: Age correctly extracted.")
-    if result == "comfort_teddy":
-        print("SUCCESS: Form type correctly identified.")
-
+    
+    # Check for specific fields from your TeddyBearForm schema
+    if 'Sarah' in str(result.values()):
+         print("SUCCESS: Name found in extracted data.")
 # def run_administrative_memory_test(tools_list):
 #     # Initialize the agent (it handles its own prompt internally now)
 #     test_agent = ParamedicAgent(tools=tools_list)
@@ -60,6 +62,7 @@ def test_sarah_scenario():
 #     )
 #     print(f"Agent (Thread 2): {p3}")
 #     print("\nTest Complete. Thread 2 should NOT know about the 45% oxygen level from Thread 1.")
+
 if __name__ == "__main__":
     # Ensure tools match your current tools.py list
     tools_array = [

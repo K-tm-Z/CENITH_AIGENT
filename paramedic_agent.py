@@ -6,6 +6,9 @@ from langchain.agents import create_agent
 from langgraph.checkpoint.memory import InMemorySaver as MemorySaver
 from dotenv import load_dotenv
 from prompts import Prompts
+from datetime import datetime
+from typing import Union
+from schema import TeddyBearForm, OcurrenceReport
 import os
 
 # IMPORTANT: Best practices for handling API keys securely in Python
@@ -57,8 +60,6 @@ import os
 #
 
 
-
-
 class ParamedicAgent:
     def __init__(self, tools, model_name="google/gemini-2.0-flash-001"):
         load_dotenv()
@@ -79,8 +80,8 @@ class ParamedicAgent:
             temperature=0
         )
 
-        self.structured_llm = self.base_llm.with_structured_output(ParamedicForm)
-
+        # self.structured_llm = self.base_llm.with_structured_output(ParamedicForm)
+        self.structured_llm = self.base_llm.with_structured_output(Union[TeddyBearForm, OcurrenceReport])
         self.tools = tools
         self.system_prompt = Prompts.get_prompt()
         self.checkpointer = MemorySaver()
@@ -98,10 +99,18 @@ class ParamedicAgent:
         )
 
     def ask(self, query: str, thread_id: str):
+        now = datetime.now()
+        current_date = now.strftime("%Y-%m-%d")
+        current_time = now.strftime("%H:%M")
+        current_day = now.strftime("%A")
+        context_instruction = (
+        f"Today is {current_day}, {current_date}. The current time is {current_time}. "
+        "Use this as the reference for any relative time mentions like 'now', 'today', or 'ten minutes ago'."
+    )
         messages = [
-            ("system", self.system_prompt),
-            ("user", query)
-        ]
+        ("system", self.system_prompt + "\n\n" + context_instruction),
+        ("user", query)
+    ]
         # We use the STRUCTURED version to ensure JSON output
         result = self.structured_llm.invoke(messages)
         return result.model_dump_json()

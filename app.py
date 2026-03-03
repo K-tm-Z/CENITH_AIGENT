@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from paramedic_agent import ParamedicAgent
 from tools import ParamedicAgentTools
 from fastapi.middleware.cors import CORSMiddleware
+import json
 
 app = FastAPI(title="WIMTACH Paramedic Assistant API")
 app.add_middleware(
@@ -32,15 +33,17 @@ class TranscriptRequest(BaseModel):
 async def process_voice_data(request: TranscriptRequest):
     try:
         # Call your agent's 'ask' method
-        response_text = agent.ask(request.text, thread_id=request.thread_id)
+        response_json_string = agent.ask(request.text, thread_id=request.thread_id)
         
+        structured_data = json.loads(response_json_string)
         # Return the AI's response as a clean JSON object
         return {
             "status": "success",
-            "data": response_text,
+            "data": structured_data,
             "thread_id": request.thread_id
         }
     except Exception as e:
+        print(f"Error processing transcript: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # To run this: uvicorn app:app --reload
