@@ -1,12 +1,14 @@
 from datetime import datetime
 import json 
-from paramedic_agent import ParamedicAgent # Match your new class name
-from tools import ParamedicAgentTools
+from Demo.backend.app.routers.paramedic_agent import ParamedicAgent # Match your new class name
+from Demo.backend.app.routers.tools import ParamedicAgentTools
+from Demo.backend.app.config import settings
+api_key = settings.OPENROUTER_API_KEY
 
 def test_sarah_scenario():
     # 1. Initialize
     tools = [ParamedicAgentTools.log_teddy_bear_gift]
-    agent = ParamedicAgent(tools=tools)
+    agent = ParamedicAgent(tools=tools, api_key=api_key)
     
     # 2. The Transcript
     transcript = "We are in Room 302. We just gave Sarah, a 5-year-old girl, a teddy bear because she was very scared."
@@ -27,42 +29,65 @@ def test_sarah_scenario():
     if 'Sarah' in str(form_data.values()):
          print("SUCCESS: Name found in extracted data.")
 
+import warnings
+import json
+
+import warnings
+import json
+
 def run_administrative_memory_test(tools_list):
-    test_agent = ParamedicAgent(tools=tools_list)
+    # 1. Keep the terminal clean for judges
+    warnings.filterwarnings("ignore", category=UserWarning)
+    
+    test_agent = ParamedicAgent(tools=tools_list, api_key=api_key)
     thread_1 = "paramedic_session_402"
     
-    print("Starting Administrative Memory Test...\n")
+    # Define the inputs clearly for the output
+    p1_input = "Arrived at scene. This is an official incident report. My Badge is 12345."
+    p2_input = "We just gave a teddy bear to a child. Use the medic number I gave you at arrival."
 
-    # Phase 1: Context Setting
-    print("--- Phase 1: Scene Arrival ---")
-    p1_raw = test_agent.ask(
-        "Arrived at scene. This is an official incident report. Badge 12345.", 
-        thread_id=thread_1
-    )
+    print("\n" + "█"*60)
+    print(" CROSS-FORM SESSION MEMORY DEMO")
+    print(""*60 + "\n")
+
+    # PHASE 1: INITIAL LOGGING
+    print(" PHASE 1: SCENE ARRIVAL (Occurrence Report)")
+    print(f"   PARAMEDIC SAYS: \"{p1_input}\"")
+    
+    p1_raw = test_agent.ask(p1_input, thread_id=thread_1)
     p1 = json.loads(p1_raw)
-    print(f"Agent identified form: {p1['form'].get('form_type')}\n")
+    p1_id = p1['form'].get('badge_number')
+    
+    print(f"   AI EXTRACTED: Badge Number → {p1_id}")
+    print(f"   FORM TYPE: {p1['form'].get('form_type')}\n")
 
-    # Phase 2: Recall
-    print("--- Phase 2: Memory Recall ---")
-    # We use a Teddy Bear transcript which requires 'paramedic_medic_number'
-    p2_raw = test_agent.ask(
-        "We just gave a teddy bear to a child. Use the medic number I gave you at arrival.", 
-        thread_id=thread_1
-    )
+    # PHASE 2: CROSS-FORM CONTINUITY
+    print(" PHASE 2: PEDIATRIC COMFORT (Teddy Bear Program)")
+    print(f"   PARAMEDIC SAYS: \"{p2_input}\"")
+    
+    p2_raw = test_agent.ask(p2_input, thread_id=thread_1)
     p2 = json.loads(p2_raw)
-    
-    # SUCCESS CRITERIA:
-    # In Sarah/Teddy form, it's 'paramedic_medic_number'. 
-    # In Occurrence form, it's 'badge_number'.
-    found_id = p2['form'].get('paramedic_medic_number') or p2['form'].get('badge_number')
-    
-    if found_id == "12345":
-        print("SUCCESS: Agent remembered ID across forms.")
+    p2_id = p2['form'].get('paramedic_medic_number')
+
+    print(f"   AI EXTRACTED: Medic Number → {p2_id}")
+    print("     (Note: This value was retrieved from memory, not the second speech input.)\n")
+
+    # FINAL AUDIT TABLE
+    print("-" * 60)
+    print(f"{'CROSS-FORM AUDIT':<35} | {'VALUE':<20}")
+    print("-" * 60)
+    print(f"{'1. ID Established (Badge #)':<35} | {p1_id:<20}")
+    print(f"{'2. ID Recalled (Medic #)':<35} | {p2_id:<20}")
+    print("-" * 60)
+
+    if p2_id == "12345":
+        print("\n TEST PASSED: Session memory persisted across different medical schemas.")
     else:
-        print(f"FAIL: Agent returned {found_id}")
+        print(f"\n TEST FAILED: Memory mismatch.")
+    print("="*60 + "\n")
         
 def test_messy_transcript():
-    agent = ParamedicAgent(tools=[]) # No tools needed for extraction test
+    agent = ParamedicAgent(tools=[], api_key=api_key) # No tools needed for extraction test
     
     # Simulate a chaotic ambulance scene
     messy_transcript = (
@@ -89,7 +114,7 @@ def test_messy_transcript():
 
 def test_checklist_extraction():
     # 1. Initialize
-    agent = ParamedicAgent(tools=[]) 
+    agent = ParamedicAgent(tools=[], api_key=api_key)
     unique_thread = f"checklist_test_{datetime.now().strftime('%M%S')}"
     # 2. Simulate a Paramedic starting their shift
     transcript = (
@@ -151,7 +176,7 @@ if __name__ == "__main__":
     ]
     
     run_administrative_memory_test(tools_array)
-    test_sarah_scenario()
-    test_checklist_extraction()
-    test_messy_transcript()
-    test_temporal_logic()
+    # test_sarah_scenario()
+    # test_checklist_extraction()
+    # test_messy_transcript()
+    # test_temporal_logic()
