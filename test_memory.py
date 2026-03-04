@@ -1,5 +1,12 @@
 from datetime import datetime
 import json 
+
+import warnings
+import json
+
+import warnings
+import json
+
 from Demo.backend.app.routers.paramedic_agent import ParamedicAgent # Match your new class name
 from Demo.backend.app.routers.tools import ParamedicAgentTools
 from Demo.backend.app.config import settings
@@ -18,7 +25,8 @@ def test_sarah_scenario():
     raw_result = agent.ask(transcript, thread_id=thread_id)
     result = json.loads(raw_result) # result is now a dict
     form_data = result.get('form', {})
-    print(f"Agent Output: {result}")
+    print(transcript)
+    print(f"\nAgent Output: {result}")
     
     # 3. Validation Logic (Using Dictionary keys instead of attributes)
     # Note: Using .get() is safer to avoid KeyErrors
@@ -29,11 +37,6 @@ def test_sarah_scenario():
     if 'Sarah' in str(form_data.values()):
          print("SUCCESS: Name found in extracted data.")
 
-import warnings
-import json
-
-import warnings
-import json
 
 def run_administrative_memory_test(tools_list):
     # 1. Keep the terminal clean for judges
@@ -102,7 +105,8 @@ def test_messy_transcript():
     raw_response = agent.ask(messy_transcript, thread_id="stress_test_001")
     result = json.loads(raw_response)
     form_data = result.get('form', {})
-    print(f"Agent Structured Output: {json.dumps(result, indent=2)}")
+    print(messy_transcript)
+    print(f"\n\nAgent Structured Output: {json.dumps(result, indent=2)}")
 
     # Check if the "Signal" was extracted from the "Noise"
     if form_data.get("paramedic_first_name") == "MISSING_IN_TRANSCRIPT":
@@ -133,9 +137,11 @@ def test_checklist_extraction():
     form_data = result.get('form', {})
     entries = form_data.get('entries', [])
 
+    print(transcript)
+
     #Print the form type for debugging
     form_type = form_data.get('form_type', 'occurrence_report')
-    print(f"DEBUG: AI chose form type: {form_type}")
+    print(f"\n\nDEBUG: AI chose form type: {form_type}")
 
     print(f"Extracted {len(entries)} checklist entries.")
     
@@ -148,7 +154,7 @@ def test_checklist_extraction():
         print("SUCCESS: Issue count correctly summed.")
 
 def test_temporal_logic():
-    agent = ParamedicAgent(tools=[])
+    agent = ParamedicAgent(tools=[],api_key=api_key) # No tools needed for extraction test
     # Use a unique thread for a clean slate
     thread_id = f"time_test_{datetime.now().strftime('%M%S')}"
     
@@ -156,12 +162,13 @@ def test_temporal_logic():
     transcript = "It's Marco. I just gave a teddy bear to a 4-year-old boy about ten minutes ago."
     
     print("--- Running Temporal Logic Test ---")
+    print(transcript)
     raw_result = agent.ask(transcript, thread_id=thread_id)
     result = json.loads(raw_result)
     form_data = result.get('form', {})
     
     extracted_time = form_data.get('time') or form_data.get('date_time')
-    print(f"Agent Extracted Time: {extracted_time}")
+    print(f"\n\nAgent Extracted Time: {extracted_time}")
     
     # Logic: If current time is 16:05, extracted time should be approx 15:55
     # For the demo, we just want to see if it's NOT a hallucinated '00:00'
@@ -176,7 +183,7 @@ if __name__ == "__main__":
     ]
     
     run_administrative_memory_test(tools_array)
-    # test_sarah_scenario()
-    # test_checklist_extraction()
-    # test_messy_transcript()
-    # test_temporal_logic()
+    test_sarah_scenario()
+    test_checklist_extraction()
+    test_messy_transcript()
+    test_temporal_logic()
