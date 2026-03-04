@@ -9,6 +9,7 @@ from .prompts import Prompts
 from datetime import datetime
 from typing import Union
 from .schema import TeddyBearForm, OcurrenceReport, ParamedicResponse, ParamedicCheckList
+from ..config import settings
 import os
 
 # IMPORTANT: Best practices for handling API keys securely in Python
@@ -59,17 +60,19 @@ import os
 #    - For more complex applications, you may want to look into key management services such as **AWS Secrets Manager**, **Azure Key Vault**, or **Google Cloud Secret Manager**.
 #
 class ParamedicAgent:
-    def __init__(self, tools, model_name="google/gemini-2.0-flash-001"):
-        load_dotenv()
-        api_key = os.getenv('OPENROUTER_API_KEY')
+    def __init__(self, tools,api_key: str = None,model_name="google/gemini-2.0-flash-001"):
+        load_dotenv()              
         
-        if not api_key:
-            raise ValueError("API key not set. Please set the OPENROUTER_API_KEY environment variable.")
+        # Use the passed api_key if provided, otherwise check environment
+        self.api_key = api_key or os.getenv('OPENROUTER_API_KEY')
+        # self.api_key = settings.OPENROUTER_API_KEY
+        if not self.api_key:
+            raise ValueError("API key not set in environment or passed to constructor.")
       
         # 1. Initialize the Base Model
         self.base_llm = ChatOpenAI(
             model=model_name.strip(), # Note: Use 'model', not 'model_name' for this class
-            api_key=api_key,
+            api_key=self.api_key,
             openai_api_base="https://openrouter.ai/api/v1",
             default_headers={
                 "HTTP-Referer": "http://localhost:3000",
