@@ -1,14 +1,14 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 # from schema import ParamedicForm
-from tools import ParamedicAgentTools
+from .tools import ParamedicAgentTools
 from langchain.agents import create_agent
 from langgraph.checkpoint.memory import InMemorySaver as MemorySaver
 from dotenv import load_dotenv
-from prompts import Prompts
+from .prompts import Prompts
 from datetime import datetime
 from typing import Union
-from schema import TeddyBearForm, OcurrenceReport, ParamedicResponse, ParamedicCheckList
+from .schema import TeddyBearForm, OcurrenceReport, ParamedicResponse, ParamedicCheckList
 import os
 
 # IMPORTANT: Best practices for handling API keys securely in Python

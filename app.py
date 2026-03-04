@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from paramedic_agent import ParamedicAgent
-from tools import ParamedicAgentTools
+from .Demo.backend.app.routers.paramedic_agent import ParamedicAgent
+from .Demo.backend.app.routers.tools import ParamedicAgentTools
 from fastapi.middleware.cors import CORSMiddleware
 import json
 
