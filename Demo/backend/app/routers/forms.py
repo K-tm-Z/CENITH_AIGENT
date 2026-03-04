@@ -3,40 +3,51 @@ from typing import List
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 
 from ..db import get_db
-from ..models.form import FormInDB, FormFieldInDB
-from ..services.form_service import create_form_template, process_form_pipeline, parse_transcription
+from ..services.form_service import create_form_template, process_form_pipeline
 from ..services.stt_service import transcribe_audio
 from ..deps import require_auth
 
 router = APIRouter(prefix="/api/forms", tags=["forms"])
 
 
-@router.get("", response_model=List[FormInDB])
+@router.get("")
 async def list_forms(user=Depends(require_auth), db=Depends(get_db)):
     """
-    List active forms for selection in the client.
+    List active form templates for selection in the client.
     """
-    cursor = db["forms"].find({"isActive": True})
+    cursor = db["form_templates"].find({"status": "active"}).sort([("formType", 1), ("version", -1)])
     docs = await cursor.to_list(length=200)
-    return [FormInDB(**doc) for doc in docs]
+
+    return [
+        {
+            "formType": d.get("formType"),
+            "displayName": d.get("displayName"),
+            "version": d.get("version"),
+            "templateImagePaths": d.get("templateImagePaths", []),
+            "createdAt": d.get("createdAt"),
+        }
+        for d in docs
+    ]
 
 
-@router.get("/{form_id}")
-async def get_form(form_id: str, user=Depends(require_auth), db=Depends(get_db)):
-    """
-    Fetch a single form along with its fields for client-side rendering.
-    """
-    form_doc = await db["forms"].find_one({"_id": form_id})
-    if not form_doc:
-        raise HTTPException(status_code=404, detail="Form not found")
+@router.get("/{form_type}")
+async def get_form(form_type: str, user=Depends(require_auth), db=Depends(get_db)):
+    doc = await db["form_templates"].find_one(
+        {"formType": form_type, "status": "active"},
+        sort=[("version", -1)]
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Template not found")
 
-    fields_cursor = db["form_fields"].find({"formId": form_id})
-    fields_docs = await fields_cursor.to_list(length=500)
-
-    form = FormInDB(**form_doc)
-    fields = [FormFieldInDB(**f) for f in fields_docs]
-    return {"form": form, "fields": fields}
-
+    return {
+        "formType": doc.get("formType"),
+        "displayName": doc.get("displayName"),
+        "version": doc.get("version"),
+        "templateImagePaths": doc.get("templateImagePaths", []),
+        "jsonSchema": doc.get("jsonSchema", {}),
+        "promptSpec": doc.get("promptSpec", {}),
+        "createdAt": doc.get("createdAt"),
+    }
 
 @router.post("/templates")
 async def upload_template(

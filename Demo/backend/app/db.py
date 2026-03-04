@@ -13,6 +13,9 @@ def get_db():
     Returns the default database from the Mongo URI.
     If your URI does not include a DB name, you must select one explicitly.
     """
+    if _client is None:
+        raise RuntimeError("Mongo client not initialized")
+        
     return get_client().get_default_database()
 
 async def init_db():

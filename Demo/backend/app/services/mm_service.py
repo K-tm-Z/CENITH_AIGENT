@@ -2,10 +2,11 @@ import base64
 import json
 import re
 from typing import Any, Dict, List, Optional
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 from ..config import settings
-
 
 def _b64_data_url(image_bytes: bytes, mime: str) -> str:
     b64 = base64.b64encode(image_bytes).decode("utf-8")
@@ -32,7 +33,8 @@ async def extract_payload_multimodal(
     Returns a dict that MUST conform to json_schema.
     This function only calls the model; validation should happen server-side.
     """
-
+    tz = ZoneInfo("America/Toronto")
+    today = datetime.now(tz).date().isoformat()
     if not settings.OPENROUTER_API_KEY:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
@@ -46,6 +48,10 @@ async def extract_payload_multimodal(
     user_text = {
         "type": "text",
         "text": (
+            f"Today is {today} in America/Toronto.\n"
+            f"Interpret relative dates (e.g., tomorrow, next Monday) using this reference date.\n\n"
+            f"All date fields MUST be absolute dates in YYY-MM-DD format.\n\n"
+            f"Never output relative words like 'tomorrow' or 'next Monday'; always convert to absolute dates.\n\n"
             "Task: Produce JSON for the selected form.\n\n"
             f"Rules:\n- " + "\n- ".join(rules) + "\n\n"
             "Transcript (may contain dictated values):\n"
@@ -57,13 +63,13 @@ async def extract_payload_multimodal(
 
     content: List[Dict[str, Any]] = [user_text]
 
-    # Provide template images (reference layout)
+    if filled_image:
+        content.append({"type": "text", "text": "Filled form photo (values source of truth if readable):"})
+        content.append({"type": "image_url", "image_url": {"url": filled_image["data_url"]}})
+
+    content.append({"type": "text", "text": "Template images (layout only; ignore any example values):"})
     for img in template_images:
         content.append({"type": "image_url", "image_url": {"url": img["data_url"]}})
-
-    # Provide filled image (if user captured the filled/checked form)
-    if filled_image:
-        content.append({"type": "image_url", "image_url": {"url": filled_image["data_url"]}})
 
     payload = {
         "model": settings.OPENROUTER_MM_MODEL,

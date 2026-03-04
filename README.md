@@ -11,8 +11,19 @@ This backend uses a **LangChain** agent powered by **OpenReuter** to extract log
 - A valid `.env` file with `OPENROUTER_API_KEY`
 
 ### 2. Installation
+
 ```bash
+.\.venv\Scripts\Activate.ps1 #PowerShell
+.\.venv\Scripts\activate #cmd
+source .venv/bin/activate #Mac/Linux
+source .venv/Scripts/activate #bash
+
 pip install -r requirements.txt
+
+uvicorn app.main:app --port 4001 #regular launch
+uvicorn app.main:app --reload --port 4001 #automated updates, can cause freeze if crash
+```
+
 
 ## 🔌 API Endpoints
 

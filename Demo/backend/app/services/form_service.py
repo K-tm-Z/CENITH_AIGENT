@@ -10,7 +10,7 @@ from ..config import settings
 from .mm_service import bytes_to_data_url, extract_payload_multimodal
 from .render_service import render_pdf_bytes, dict_to_xml_bytes
 from .email_service import send_email_with_attachments
-
+from fastapi.concurrency import run_in_threadpool
 
 def _ensure_storage_dir(*parts: str) -> str:
     path = os.path.join(settings.STORAGE_DIR, *parts)
@@ -116,30 +116,36 @@ async def process_form_pipeline(
         "transcript": transcript,
         "payload": payload,
         "pdfPath": pdf_path,
+        "pdfUrl": f"/storage/runs/{run_id}/{form_type}.pdf",
         "xmlPath": xml_path,
+        "xmlUrl": f"/storage/runs/{run_id}/{form_type}.xml", 
         "emailedTo": recipient_email,
         "status": "pending",
         "createdAt": datetime.now(timezone.utc).isoformat(),
     })
-
-    # send email with generated artifacts
-    send_email_with_attachments(
-        to_email=recipient_email,
-        subject=f"{form_type} output",
-        body="Attached are the generated PDF and XML outputs.",
-        attachments=[
-            (f"{form_type}.pdf", pdf_bytes, "application/pdf"),
-            (f"{form_type}.xml", xml_bytes, "application/xml"),
-        ],
-    )
-
-    # Mark run as sent; if email sending fails, record the failure but still return generation metadata.
+    
+    status = "pending"
+    email_error = None
+    
     try:
+        await run_in_threadpool(
+            send_email_with_attachments,
+            to_email=recipient_email,
+            subject=f"{form_type} output",
+            body="Attached are the generated PDF and XML outputs.",
+            attachments=[
+                (f"{form_type}.pdf", pdf_bytes, "application/pdf"),
+                (f"{form_type}.xml", xml_bytes, "application/xml"),
+            ],
+        )
+        status = "sent"
         await db["form_runs"].update_one({"runId": run_id}, {"$set": {"status": "sent"}})
     except Exception as e:
+        status = "email_failed"
+        email_error = str(e)
         await db["form_runs"].update_one(
             {"runId": run_id},
-            {"$set": {"status": "email_failed", "emailError": str(e)}},
+            {"$set": {"status": "email_failed", "emailError": email_error}},
         )
 
     return {
@@ -149,7 +155,8 @@ async def process_form_pipeline(
         "pdfPath": pdf_path,
         "xmlPath": xml_path,
         "emailedTo": recipient_email,
-        "status": "sent",
+        "status": status,
+        **({"emailError": email_error} if email_error else {}),
     }
 
 
@@ -163,26 +170,38 @@ async def create_form_template(
 ) -> Dict[str, Any]:
     db = get_db()
 
+    if not template_images:
+        raise HTTPException(status_code=400, detail="templateImages must include at least 1 image")
+
     try:
         json_schema = json.loads(json_schema_str)
     except Exception:
         raise HTTPException(status_code=400, detail="jsonSchema must be valid JSON")
 
-    base_dir = _ensure_storage_dir("forms", form_type, f"v{version}")
-    stored_paths = []
-    for i, (filename, b) in enumerate(template_images):
-        # normalize names
-        ext = os.path.splitext(filename)[1].lower() or ".png"
-        path = os.path.join(base_dir, f"template_{i+1}{ext}")
-        with open(path, "wb") as f:
-            f.write(b)
-        stored_paths.append(path)
-
-    # deactivate previous active versions
+    # Deactivate previous active versions first
     await db["form_templates"].update_many(
         {"formType": form_type, "status": "active"},
-        {"$set": {"status": "deprecated"}}
+        {"$set": {"status": "deprecated"}},
     )
+
+    base_dir = _ensure_storage_dir("forms", form_type, f"v{version}")
+
+    stored_paths: list[str] = []
+    public_urls: list[str] = []
+
+    for i, (filename, b) in enumerate(template_images):
+        ext = os.path.splitext(filename)[1].lower() or ".png"
+        fs_name = f"template_{i+1}{ext}"
+        fs_path = os.path.join(base_dir, fs_name)
+
+        with open(fs_path, "wb") as f:
+            f.write(b)
+
+        # Option A (what you have now): store absolute-ish server path
+        stored_paths.append(fs_path)
+
+        # Public URL served by app.mount("/storage", StaticFiles(directory=storage_dir), name="storage")
+        public_urls.append(f"/storage/forms/{form_type}/v{version}/{fs_name}")
 
     doc = {
         "formType": form_type,
@@ -190,17 +209,27 @@ async def create_form_template(
         "version": version,
         "status": "active",
         "templateImagePaths": stored_paths,
+        "templateImageUrls": public_urls,
         "jsonSchema": json_schema,
         "promptSpec": {
             "rules": [
                 "Return ONLY valid JSON (no markdown, no code fences).",
                 "If unknown/not visible, use empty string.",
                 "No extra keys; must conform to schema.",
-                "Use transcript to fill fields; if a filled form photo is provided, prefer the photo."
+                "Template images are layout references only; do NOT copy example/placeholder values from them.",
+                "Use transcript to fill fields; if a filled form photo is provided, prefer the photo.",
+                "Interpret relative dates (tomorrow/next Monday) using the provided reference date; output YYYY-MM-DD."
             ]
         },
         "createdAt": datetime.now(timezone.utc).isoformat(),
     }
 
     await db["form_templates"].insert_one(doc)
-    return {"ok": True, "formType": form_type, "version": version, "templateImagePaths": stored_paths}
+
+    return {
+        "ok": True,
+        "formType": form_type,
+        "version": version,
+        "templateImagePaths": stored_paths,
+        "templateImageUrls": public_urls,
+    }
