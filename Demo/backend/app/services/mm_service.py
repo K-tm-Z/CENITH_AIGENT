@@ -50,7 +50,7 @@ async def extract_payload_multimodal(
         "text": (
             f"Today is {today} in America/Toronto.\n"
             f"Interpret relative dates (e.g., tomorrow, next Monday) using this reference date.\n\n"
-            f"All date fields MUST be absolute dates in YYY-MM-DD format.\n\n"
+            f"All date fields MUST be absolute dates in YYYY-MM-DD format.\n\n"
             f"Never output relative words like 'tomorrow' or 'next Monday'; always convert to absolute dates.\n\n"
             "Task: Produce JSON for the selected form.\n\n"
             f"Rules:\n- " + "\n- ".join(rules) + "\n\n"

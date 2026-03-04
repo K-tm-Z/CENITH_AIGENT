@@ -75,6 +75,47 @@ async def parse_transcription(
 
     return payload
 
+async def create_form_draft(
+    *,
+    form_type: str,
+    transcript: str,
+    filled_form_image_bytes: Optional[bytes],
+    filled_form_image_mime: Optional[str],
+) -> Dict[str, Any]:
+    payload = await parse_transcription(
+        form_type=form_type,
+        transcript=transcript,
+        filled_form_image_bytes=filled_form_image_bytes,
+        filled_form_image_mime=filled_form_image_mime,
+    )
+
+    template = await get_active_template(form_type)
+
+    validation = validate_payload(form_type, payload, template)  # you implement below
+
+    draft_id = str(uuid.uuid4())
+    db = get_db()
+    await db["form_drafts"].insert_one({
+        "draftId": draft_id,
+        "formType": form_type,
+        "templateVersion": template.get("version"),
+        "transcript": transcript,
+        "payload": payload,
+        "validation": validation,
+        "status": "draft",
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "updatedAt": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {
+        "draftId": draft_id,
+        "formType": form_type,
+        "templateVersion": template.get("version"),
+        "payload": payload,
+        "validation": validation,
+        "transcript": transcript,
+        "status": "draft",
+    }
 
 async def process_form_pipeline(
     *,
@@ -90,6 +131,18 @@ async def process_form_pipeline(
         filled_form_image_mime=filled_form_image_mime,
     )
 
+    return await finalize_payload_to_run(
+        form_type=form_type,
+        transcript=transcript,
+        payload=payload
+    )
+
+async def finalize_payload_to_run(
+    *,
+    form_type: str,
+    transcript: str,
+    payload: dict,
+) -> Dict[str, Any]:
     template = await get_active_template(form_type)
 
     pdf_bytes = render_pdf_bytes(form_type, payload)
@@ -159,6 +212,72 @@ async def process_form_pipeline(
         **({"emailError": email_error} if email_error else {}),
     }
 
+def validate_payload(form_type: str, payload: dict, template: dict) -> dict:
+    errors = []
+    warnings = []
+
+    schema = template.get("jsonSchema") or {}
+    required = schema.get("required") or []
+
+    # required checks (only top-level; can expand later)
+    for k in required:
+        v = payload.get(k)
+        if v is None or (isinstance(v, str) and not v.strip()):
+            errors.append({"path": k, "message": "Required field is missing/empty"})
+
+    # heuristic: label-as-value
+    def walk(obj, path=""):
+        if isinstance(obj, dict):
+            for kk, vv in obj.items():
+                walk(vv, f"{path}.{kk}" if path else kk)
+        elif isinstance(obj, list):
+            for i, vv in enumerate(obj):
+                walk(vv, f"{path}[{i}]")
+        elif isinstance(obj, str):
+            bad = {"first name", "last name", "medic number", "date"}  # extend per your forms
+            if obj.strip().lower() in bad:
+                warnings.append({"path": path, "message": "Value looks like a label/placeholder"})
+    walk(payload)
+
+    return {"errors": errors, "warnings": warnings}
+
+async def finalize_form_draft(
+    *,
+    draft_id: str,
+    confirmed_payload: Optional[dict] = None,
+) -> Dict[str, Any]:
+    db = get_db()
+    draft = await db["form_drafts"].find_one({"draftId": draft_id, "status": "draft"})
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found or not in draft state")
+
+    form_type = draft["formType"]
+    transcript = draft.get("transcript", "")
+    payload = confirmed_payload or draft.get("payload") or {}
+
+    template = await get_active_template(form_type)
+    validation = validate_payload(form_type, payload, template)
+
+    if validation["errors"]:
+        # Hard stop: user must correct
+        await db["form_drafts"].update_one(
+            {"draftId": draft_id},
+            {"$set": {"payload": payload, "validation": validation, "updatedAt": datetime.now(timezone.utc).isoformat()}}
+        )
+        raise HTTPException(status_code=400, detail={"message": "Validation failed", "validation": validation})
+
+    run_res = await finalize_payload_to_run(
+        form_type=form_type,
+        transcript=transcript,
+        payload=payload,
+    )
+
+    await db["form_drafts"].update_one(
+        {"draftId": draft_id},
+        {"$set": {"status": "finalized", "updatedAt": datetime.now(timezone.utc).isoformat(), "runId": run_res["runId"]}}
+    )
+
+    return {"draftId": draft_id, "run": run_res}
 
 async def create_form_template(
     *,
@@ -230,6 +349,84 @@ async def create_form_template(
         "ok": True,
         "formType": form_type,
         "version": version,
-        "templateImagePaths": stored_paths,
-        "templateImageUrls": public_urls,
+        "templateImageUrls": public_urls
+    }
+
+async def update_form_draft_payload(
+    *,
+    draft_id: str,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    db = get_db()
+    draft = await db["form_drafts"].find_one({"draftId": draft_id, "status": "draft"})
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found or not in draft state")
+
+    form_type = draft["formType"]
+    template = await get_active_template(form_type)
+
+    validation = validate_payload(form_type, payload, template)
+
+    await db["form_drafts"].update_one(
+        {"draftId": draft_id},
+        {"$set": {
+            "payload": payload,
+            "validation": validation,
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+
+    return {
+        "draftId": draft_id,
+        "formType": form_type,
+        "templateVersion": draft.get("templateVersion"),
+        "payload": payload,
+        "validation": validation,
+        "transcript": draft.get("transcript", ""),
+        "status": "draft",
+    }
+
+
+async def reextract_form_draft(
+    *,
+    draft_id: str,
+    transcript: str,
+    filled_form_image_bytes: Optional[bytes],
+    filled_form_image_mime: Optional[str],
+) -> Dict[str, Any]:
+    db = get_db()
+    draft = await db["form_drafts"].find_one({"draftId": draft_id, "status": "draft"})
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found or not in draft state")
+
+    form_type = draft["formType"]
+
+    payload = await parse_transcription(
+        form_type=form_type,
+        transcript=transcript,
+        filled_form_image_bytes=filled_form_image_bytes,
+        filled_form_image_mime=filled_form_image_mime,
+    )
+
+    template = await get_active_template(form_type)
+    validation = validate_payload(form_type, payload, template)
+
+    await db["form_drafts"].update_one(
+        {"draftId": draft_id},
+        {"$set": {
+            "transcript": transcript,
+            "payload": payload,
+            "validation": validation,
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+
+    return {
+        "draftId": draft_id,
+        "formType": form_type,
+        "templateVersion": draft.get("templateVersion"),
+        "payload": payload,
+        "validation": validation,
+        "transcript": transcript,
+        "status": "draft",
     }
