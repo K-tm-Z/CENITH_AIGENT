@@ -1,52 +1,65 @@
-import { API_BASE_URL } from './constants.js'
+// src/lib/api.js
+const API_BASE = import.meta.env.VITE_API_BASE_URL || ""; 
+// If you proxy in Vite, keep this "" and use "/api/..." paths.
+// If backend is separate, set VITE_API_BASE_URL="http://localhost:4001"
 
-async function readJsonSafe(res) {
-  try {
-    return await res.json()
-  } catch {
-    return null
-  }
+function getToken() {
+  // Adjust to your storage key
+  return localStorage.getItem("accessToken") || "";
 }
 
-export async function apiFetch(path, { accessToken, ...init } = {}) {
-  const headers = new Headers(init.headers || {})
-  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
+export async function apiJson(path, { method = "GET", body, token } = {}) {
+  const auth = token ?? getToken();
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...(auth ? { Authorization: `Bearer ${auth}` } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers
-  })
+  const text = await res.text();
+  const data = text ? safeJsonParse(text) : null;
 
   if (!res.ok) {
-    const body = await readJsonSafe(res)
-    const message = body?.error || body?.message || `${res.status} ${res.statusText}`
-    const err = new Error(message)
-    err.status = res.status
-    err.body = body
-    throw err
+    const msg =
+      (data && (data.detail || data.message)) ||
+      text ||
+      `Request failed (${res.status})`;
+    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
   }
+  return data;
+}
 
-  const contentType = res.headers.get('content-type') || ''
-  if (contentType.includes('application/json')) {
-    return res.json()
+export async function apiFormData(path, { method = "POST", formData, token } = {}) {
+  const auth = token ?? getToken();
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: {
+      ...(auth ? { Authorization: `Bearer ${auth}` } : {}),
+      // DO NOT set Content-Type for FormData; browser sets boundary
+    },
+    body: formData,
+  });
+
+  const text = await res.text();
+  const data = text ? safeJsonParse(text) : null;
+
+  if (!res.ok) {
+    const msg =
+      (data && (data.detail || data.message)) ||
+      text ||
+      `Request failed (${res.status})`;
+    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
   }
-  return res.text()
+  return data;
 }
 
-export async function postJson(path, body, { accessToken } = {}) {
-  return apiFetch(path, {
-    method: 'POST',
-    accessToken,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body || {})
-  })
+function safeJsonParse(s) {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return s;
+  }
 }
-
-export async function postForm(path, formData, { accessToken } = {}) {
-  return apiFetch(path, {
-    method: 'POST',
-    accessToken,
-    body: formData
-  })
-}
-
