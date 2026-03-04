@@ -23,7 +23,28 @@ type WeatherState = {
   windKmh: number;
 };
 
+type JsonSchemaField = {
+  type: "string" | "number" | "date";
+  title: string;
+  enum?: string[];
+};
 
+type JsonSchema = {
+  properties: {
+    [key: string]: JsonSchemaField;
+  };
+};
+
+type ValidationState = {
+  errors?: Record<string, string>;
+  warnings?: Record<string, string>;
+};
+
+type FormDraft = {
+  jsonSchema: JsonSchema;
+  payload: any;
+  validation?: ValidationState;
+};
 // LOGIN PAGE
 
 const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
@@ -43,6 +64,94 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
         <button className="login-button" onClick={handleLogin}>
           Sign In
         </button>
+      </div>
+    </div>
+  );
+};
+
+const DynamicFormModal: React.FC<{
+  isOpen: boolean;
+  draft: FormDraft | null;
+  onCancel: () => void;
+  onSubmit: (data: any) => void;
+}> = ({ isOpen, draft, onCancel, onSubmit }) => {
+  const [formState, setFormState] = useState<any>({});
+
+  useEffect(() => {
+    if (draft?.payload) setFormState(draft.payload);
+  }, [draft]);
+
+  if (!isOpen || !draft) return null;
+
+  const handleChange = (field: string, value: any) => {
+    setFormState((prev: any) => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-card">
+        <h2>Review Generated Report</h2>
+
+        <div className="modal-form">
+          {Object.entries(draft.jsonSchema.properties).map(
+            ([field, config]: any) => (
+              <div key={field}>
+                <label className="modal-label">
+                  {config.title}
+
+                  {config.enum ? (
+                    <select
+                      value={formState[field] ?? ""}
+                      onChange={(e) =>
+                        handleChange(field, e.target.value)
+                      }
+                    >
+                      {config.enum.map((opt: string) => (
+                        <option key={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={config.type === "number" ? "number" : "text"}
+                      value={formState[field] ?? ""}
+                      onChange={(e) =>
+                        handleChange(field, e.target.value)
+                      }
+                    />
+                  )}
+                </label>
+
+                {draft.validation?.errors?.[field] && (
+                  <div className="error-text">
+                    {draft.validation.errors[field]}
+                  </div>
+                )}
+
+                {draft.validation?.warnings?.[field] && (
+                  <div className="warning-text">
+                    {draft.validation.warnings[field]}
+                  </div>
+                )}
+              </div>
+            )
+          )}
+        </div>
+
+        <div className="modal-actions">
+          <button onClick={onCancel} className="modal-cancel">
+            Cancel
+          </button>
+
+          <button
+            onClick={() => onSubmit(formState)}
+            className="modal-submit"
+          >
+            Submit
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -97,6 +206,10 @@ const Dashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       .catch(() => setWeatherStatus("error"));
   }, []);
 
+  const [showModal, setShowModal] = useState(false);
+  const [currentDraft, setCurrentDraft] =
+    useState<FormDraft | null>(null);
+
   const handleSignOut = () => {
     onLogout();
     navigate("/");
@@ -114,7 +227,14 @@ const Dashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
             </p>
             <div className="fake-input">
               <input type="text" placeholder="What should I work on next?" />
-              <button className="voice-button">
+              <button
+                className="voice-button"
+                onClick={() => {
+                  if (currentDraft) {
+                    setShowModal(true);
+                  }
+                }}
+              >
                 <span className="voice-dot" />
               </button>
             </div>
@@ -145,27 +265,34 @@ const Dashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               <th>Type</th>
               <th>Description</th>
               <th>Status</th>
+              <th># of Issues</th>
               <th>Notes</th>
             </tr>
           </thead>
+
           <tbody>
             <tr>
               <td>ACR Completion</td>
               <td>Number of ACRs/PCRs that are unfinished</td>
               <td className="status-high">Bad</td>
-              <td>Each must be completed with 24 hours of call completion</td>
+              <td>3</td>
+              <td>Each must be completed within 24 hours of call completion</td>
             </tr>
+
             <tr>
               <td>Vaccinations</td>
               <td>Required vaccinations up to date</td>
               <td className="status-high">Bad</td>
+              <td>2</td>
               <td>Vaccination Status as per guidelines</td>
             </tr>
+
             <tr>
               <td>Overtime Req.</td>
               <td>Overtime Requests outstanding</td>
               <td className="status-high">Bad</td>
-              <td>Overtime claims outstanding</td>
+              <td>5</td>
+              <td>Overtime claims pending review</td>
             </tr>
           </tbody>
         </table>
@@ -216,67 +343,77 @@ const Dashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
       {/* WIDGETS */}
       <aside className="column column-right">
-  {/* WEATHER WIDGET */}
-  <div className="widget widget-weather">
-    <div className="widget-header">
-      <span>Weather</span>
-      <span className="widget-location">Toronto, CA</span>
-    </div>
+        {/* WEATHER WIDGET */}
+        <div className="widget widget-weather">
+          <div className="widget-header">
+            <span>Weather</span>
+            <span className="widget-location">Toronto, CA</span>
+          </div>
 
-    {weatherStatus === "loading" && (
-      <div className="weather-main">
-        <span className="weather-temp">--</span>
-        <span className="weather-desc">Loading...</span>
-      </div>
-    )}
+          {weatherStatus === "loading" && (
+            <div className="weather-main">
+              <span className="weather-temp">--</span>
+              <span className="weather-desc">Loading...</span>
+            </div>
+          )}
 
-    {weatherStatus === "error" && (
-      <div className="weather-main">
-        <span className="weather-temp">--</span>
-        <span className="weather-desc">Weather unavailable</span>
-      </div>
-    )}
+          {weatherStatus === "error" && (
+            <div className="weather-main">
+              <span className="weather-temp">--</span>
+              <span className="weather-desc">Weather unavailable</span>
+            </div>
+          )}
 
-    {weatherStatus === "ready" && weather && (
-      <>
-        <div className="weather-main">
-          <span className="weather-temp">{weather.temp}°</span>
-          <span className="weather-desc">
-            {weather.description.charAt(0).toUpperCase() +
-              weather.description.slice(1)}
-          </span>
+          {weatherStatus === "ready" && weather && (
+            <>
+              <div className="weather-main">
+                <span className="weather-temp">{weather.temp}°</span>
+                <span className="weather-desc">
+                  {weather.description.charAt(0).toUpperCase() +
+                    weather.description.slice(1)}
+                </span>
+              </div>
+              <div className="weather-footer">
+                <span>H: {weather.high}°</span>
+                <span>L: {weather.low}°</span>
+                <span>Wind: {weather.windKmh} km/h</span>
+              </div>
+            </>
+          )}
         </div>
-        <div className="weather-footer">
-          <span>H: {weather.high}°</span>
-          <span>L: {weather.low}°</span>
-          <span>Wind: {weather.windKmh} km/h</span>
+
+        {/* SECOND WIDGET */}
+        <div className="widget">
+          <div className="widget-header">
+            <span>Widget Slot</span>
+            <span className="widget-tag">Placeholder</span>
+          </div>
+          <p className="widget-body">
+            Add any future widget here (e.g. calendar, notifications, KPIs).
+          </p>
         </div>
-      </>
-    )}
-  </div>
 
-  {/* SECOND WIDGET */}
-  <div className="widget">
-    <div className="widget-header">
-      <span>Widget Slot</span>
-      <span className="widget-tag">Placeholder</span>
-    </div>
-    <p className="widget-body">
-      Add any future widget here (e.g. calendar, notifications, KPIs).
-    </p>
-  </div>
+        {/* THIRD WIDGET */}
+        <div className="widget">
+          <div className="widget-header">
+            <span>Widget Slot</span>
+            <span className="widget-tag">Placeholder</span>
+          </div>
+          <p className="widget-body">
+            Another reserved area for future integrations (e.g. email, files).
+          </p>
+        </div>
+      </aside>
+      <DynamicFormModal
+        isOpen={showModal}
+        draft={currentDraft}
+        onCancel={() => setShowModal(false)}
+        onSubmit={(data) => {
+          console.log("Final form submission:", data);
 
-  {/* THIRD WIDGET */}
-  <div className="widget">
-    <div className="widget-header">
-      <span>Widget Slot</span>
-      <span className="widget-tag">Placeholder</span>
-    </div>
-    <p className="widget-body">
-      Another reserved area for future integrations (e.g. email, files).
-    </p>
-  </div>
-</aside>
+          setShowModal(false);
+        }}
+      />
     </div>
   );
 };
