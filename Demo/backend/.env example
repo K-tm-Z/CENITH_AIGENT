@@ -1,3 +1,0 @@
-LLM_API_URL=https://openrouter.ai/nvidia/llama-nemotron-embed-vl-1b-v2:free/api
-LLM_API_KEY=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
-LLM_MODEL=llama-nemotron-embed-vl-1b-v2:free
